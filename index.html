@@ -42,22 +42,27 @@
               type="text"
               placeholder="/experiments/experiment-index.json"
             />
-            <button id="load-index" class="action-button">Load</button>
+            <button
+              id="load-index"
+              class="action-button"
+              title="Load an experiment-index.json (or legacy summary.json) from a URL."
+              aria-label="Load index URL"
+            >
+              Load
+            </button>
           </div>
-          <p class="muted">
-            Serve files over HTTP and use <code>?index=/path/to/experiment-index.json</code>.
-            Try <code>mock/experiment-index.json</code> for sample data.
-          </p>
         </div>
 
         <div class="control-block">
           <label>Legacy summary.json</label>
-          <button id="load-legacy" class="action-button secondary">
+          <button
+            id="load-legacy"
+            class="action-button secondary"
+            title="Load a legacy summary.json file from disk."
+            aria-label="Load legacy summary.json"
+          >
             Load summary.json
           </button>
-          <p class="muted">
-            Use this when opening the UI directly from the filesystem.
-          </p>
         </div>
 
         <div>

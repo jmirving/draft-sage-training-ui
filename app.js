@@ -61,6 +61,26 @@ function formatNumber(value, digits = 3) {
   return value.toFixed(digits);
 }
 
+function parseRunIdTimestamp(runId) {
+  if (!runId || typeof runId !== "string") {
+    return null;
+  }
+
+  const compact = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/.exec(runId);
+  if (compact) {
+    const [, year, month, day, hour, minute, second] = compact;
+    return `${year}-${month}-${day}T${hour}:${minute}:${second}Z`;
+  }
+
+  const dashed = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})Z/.exec(runId);
+  if (dashed) {
+    const [, date, hour, minute, second] = dashed;
+    return `${date}T${hour}:${minute}:${second}Z`;
+  }
+
+  return null;
+}
+
 function updateQueryParam(path) {
   const url = new URL(window.location.href);
   if (path) {
@@ -88,6 +108,7 @@ function buildLegacyIndex(summaryRows, summaryLocation) {
       ? experiment.replace(/^exp-/, "")
       : "legacy";
     const runDir = row.experiment && row.run_id ? `${row.experiment}/${row.run_id}` : null;
+    const inferredDate = parseRunIdTimestamp(runId);
 
     runs.push({
       run_id: runId,
@@ -110,8 +131,8 @@ function buildLegacyIndex(summaryRows, summaryLocation) {
         run_id: runId,
         display_name: experiment,
         status: "completed",
-        created_at: null,
-        updated_at: null,
+        created_at: inferredDate,
+        updated_at: inferredDate,
         description: row.feature_set
           ? `Feature set: ${row.feature_set.join(", ")}`
           : "Legacy training run summary.",
@@ -121,6 +142,11 @@ function buildLegacyIndex(summaryRows, summaryLocation) {
           accuracy: row.test_accuracy ?? null,
           loss: row.test_loss ?? null,
           best_val_loss: row.best_val_loss ?? null
+        },
+        samples: {
+          train: row.train_samples ?? null,
+          val: row.val_samples ?? null,
+          test: row.test_samples ?? null
         },
         paths: runDir
           ? {
@@ -141,6 +167,34 @@ function buildLegacyIndex(summaryRows, summaryLocation) {
     },
     summaries
   };
+}
+
+function formatDatasetValue(summary, fallbackRunId) {
+  if (summary?.dataset?.window) {
+    return `${summary.dataset.window.start} to ${summary.dataset.window.end}`;
+  }
+
+  const samples = summary?.samples;
+  if (samples && (samples.train || samples.val || samples.test)) {
+    const parts = [];
+    if (samples.train) {
+      parts.push(`train ${samples.train}`);
+    }
+    if (samples.val) {
+      parts.push(`val ${samples.val}`);
+    }
+    if (samples.test) {
+      parts.push(`test ${samples.test}`);
+    }
+    return `samples: ${parts.join(" / ")}`;
+  }
+
+  const inferred = parseRunIdTimestamp(fallbackRunId);
+  if (inferred) {
+    return `run date ${formatDate(inferred)}`;
+  }
+
+  return "—";
 }
 
 function buildFilterOptions(runs, key, order) {
@@ -396,16 +450,20 @@ function renderDetail() {
 
   const detailGrid = document.createElement("div");
   detailGrid.className = "detail-grid";
-  detailGrid.appendChild(createMetaField("Created", formatDate(summary?.created_at)));
-  detailGrid.appendChild(createMetaField("Updated", formatDate(summary?.updated_at)));
+  const fallbackDate = parseRunIdTimestamp(selectedRun.run_id);
+  detailGrid.appendChild(
+    createMetaField("Created", formatDate(summary?.created_at || fallbackDate))
+  );
+  detailGrid.appendChild(
+    createMetaField("Updated", formatDate(summary?.updated_at || fallbackDate))
+  );
   const progressValue = summary?.progress
     ? `${summary.progress.epoch}/${summary.progress.epochs}`
     : "—";
   detailGrid.appendChild(createMetaField("Progress", progressValue));
-  const datasetValue = summary?.dataset?.window
-    ? `${summary.dataset.window.start} to ${summary.dataset.window.end}`
-    : "—";
-  detailGrid.appendChild(createMetaField("Dataset", datasetValue));
+  detailGrid.appendChild(
+    createMetaField("Dataset", formatDatasetValue(summary, selectedRun.run_id))
+  );
 
   const metrics = document.createElement("div");
   metrics.className = "metrics";
