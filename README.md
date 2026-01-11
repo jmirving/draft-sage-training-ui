@@ -32,6 +32,13 @@ http://localhost:8000/?index=/experiments/experiment-index.json
 
 The `summary_path` values in the index are resolved relative to the index file.
 
+## Legacy outputs (summary.json)
+Older runs may only provide a root-level `summary.json` array (for example,
+`/home/jirving/projects/lol/.tmp/training-clean-2025-ep20/summary.json`).
+The UI can load this directly:
+- Click **Load summary.json** and select the file, or
+- Serve the file over HTTP and use `?index=/path/to/summary.json`.
+
 ## Load local experiment outputs (no server)
 Use the **Select output folder** button in the UI to pick a training output
 directory that contains `experiment-index.json`. This uses the File System
@@ -48,6 +55,19 @@ python -m http.server 8000
 Then open (adjust the path as needed):
 ```
 http://localhost:8000/?index=/experiments/experiment-index.json
+```
+
+## WSL-friendly serving (single command)
+Serve the repo root so the UI and outputs share the same origin:
+
+```bash
+cd /home/jirving/projects/lol
+python -m http.server 8000
+```
+
+Then open:
+```
+http://localhost:8000/draft-sage-training-ui/index.html?index=/.tmp/training-clean-2025-ep20/summary.json
 ```
 
 ## Mock data

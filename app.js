@@ -37,8 +37,10 @@ const elements = {
   indexInput: document.getElementById("index-input"),
   pickDirectory: document.getElementById("pick-directory"),
   loadMock: document.getElementById("load-mock"),
+  loadLegacy: document.getElementById("load-legacy"),
   reloadIndex: document.getElementById("reload-index"),
-  loadIndex: document.getElementById("load-index")
+  loadIndex: document.getElementById("load-index"),
+  legacyFile: document.getElementById("legacy-file")
 };
 
 function formatDate(value) {
@@ -98,6 +100,78 @@ function updateQueryParam(path) {
     url.searchParams.delete("index");
   }
   window.history.replaceState({}, "", url);
+}
+
+function buildLegacyIndex(summaryRows, summaryLocation) {
+  const generatedAt = new Date().toISOString();
+  const runs = [];
+  const summaries = [];
+
+  summaryRows.forEach((row) => {
+    const runId = row.run_id || row.runId || row.id || row.experiment;
+    if (!runId) {
+      return;
+    }
+
+    const experiment = row.experiment || runId;
+    const category = experiment.startsWith("exp-")
+      ? experiment.replace(/^exp-/, "")
+      : "legacy";
+    const runDir = row.experiment && row.run_id ? `${row.experiment}/${row.run_id}` : null;
+
+    runs.push({
+      run_id: runId,
+      display_name: experiment,
+      status: "completed",
+      category,
+      metrics: {
+        accuracy: row.test_accuracy ?? null,
+        loss: row.test_loss ?? null,
+        best_val_loss: row.best_val_loss ?? null
+      },
+      summary_path: summaryLocation.summaryPath
+    });
+
+    summaries.push({
+      run_id: runId,
+      summaryUrl: summaryLocation.summaryUrl,
+      summaryPath: summaryLocation.summaryPath,
+      data: {
+        schema_version: "1.0",
+        run_id: runId,
+        display_name: experiment,
+        status: "completed",
+        created_at: null,
+        updated_at: null,
+        description: row.feature_set
+          ? `Feature set: ${row.feature_set.join(", ")}`
+          : "Legacy training run summary.",
+        category,
+        progress: row.epochs ? { epoch: row.epochs, epochs: row.epochs } : null,
+        metrics: {
+          accuracy: row.test_accuracy ?? null,
+          loss: row.test_loss ?? null,
+          best_val_loss: row.best_val_loss ?? null
+        },
+        paths: runDir
+          ? {
+              config: `${runDir}/config.json`,
+              metrics: `${runDir}/metrics.json`,
+              model: `${runDir}/model.pth`
+            }
+          : {}
+      }
+    });
+  });
+
+  return {
+    indexData: {
+      schema_version: "1.0",
+      generated_at: generatedAt,
+      runs
+    },
+    summaries
+  };
 }
 
 function buildFilterOptions(runs, key, order) {
@@ -374,6 +448,11 @@ function renderDetail() {
   metrics.appendChild(
     createMetaField("Loss", formatNumber(summary?.metrics?.loss))
   );
+  if (summary?.metrics?.best_val_loss !== undefined) {
+    metrics.appendChild(
+      createMetaField("Best val loss", formatNumber(summary?.metrics?.best_val_loss))
+    );
+  }
   const topKValue = summary?.metrics?.top_k
     ? `${summary.metrics.top_k.k}: ${formatNumber(
         summary.metrics.top_k.accuracy
@@ -445,17 +524,29 @@ function createArtifactLink(label, relativePath, summaryEntry) {
     return wrapper;
   }
 
+  if (state.source?.type === "fs") {
+    const text = document.createElement("span");
+    text.textContent = label;
+    wrapper.appendChild(text);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Open";
+    button.addEventListener("click", () =>
+      openFsArtifact(summaryEntry.summaryPath, relativePath)
+    );
+    wrapper.appendChild(button);
+    return wrapper;
+  }
+
   const text = document.createElement("span");
   text.textContent = label;
   wrapper.appendChild(text);
 
-  const button = document.createElement("button");
-  button.type = "button";
-  button.textContent = "Open";
-  button.addEventListener("click", () =>
-    openFsArtifact(summaryEntry.summaryPath, relativePath)
-  );
-  wrapper.appendChild(button);
+  const note = document.createElement("span");
+  note.className = "muted";
+  note.textContent = "Use folder picker for file access.";
+  wrapper.appendChild(note);
 
   return wrapper;
 }
@@ -530,6 +621,13 @@ function syncSelection() {
 }
 
 async function loadSummary(run) {
+  if (state.source?.summaryMode === "inline") {
+    state.summaryLoading = false;
+    state.summaryError = null;
+    renderDetail();
+    return;
+  }
+
   if (!run?.summary_path) {
     state.summaryError = "Missing summary path for this run.";
     state.summaryLoading = false;
@@ -591,12 +689,32 @@ async function loadIndexFromFetch(path, updateUrl) {
     }
 
     const data = await response.json();
-    state.indexData = data;
-    state.source = { type: "fetch", indexPath: path, indexUrl };
+
+    if (Array.isArray(data)) {
+      const legacy = buildLegacyIndex(data, {
+        summaryPath: path,
+        summaryUrl: indexUrl
+      });
+      state.indexData = legacy.indexData;
+      state.source = {
+        type: "fetch",
+        indexPath: path,
+        indexUrl,
+        summaryMode: "inline"
+      };
+      legacy.summaries.forEach((entry) =>
+        state.summaryCache.set(entry.run_id, entry)
+      );
+      setIndexMeta({ sourceLabel: "Legacy summary.json", indexPath: path });
+    } else {
+      state.indexData = data;
+      state.source = { type: "fetch", indexPath: path, indexUrl };
+      setIndexMeta({ sourceLabel: "URL", indexPath: path });
+    }
+
     if (updateUrl) {
       updateQueryParam(path);
     }
-    setIndexMeta({ sourceLabel: "URL", indexPath: path });
     elements.indexInput.value = path;
   } catch (error) {
     state.indexError = error.message || "Unable to load experiment index.";
@@ -626,16 +744,49 @@ async function loadIndexFromDirectory(directoryHandle) {
   renderDetail();
 
   try {
-    const file = await readFileFromDirectory(directoryHandle, "experiment-index.json");
-    const data = JSON.parse(await file.text());
-    state.indexData = data;
-    state.source = {
-      type: "fs",
-      directoryHandle,
-      indexPath: "experiment-index.json"
-    };
+    let file = null;
+    let data = null;
+    let indexPath = "experiment-index.json";
+
+    try {
+      file = await readFileFromDirectory(
+        directoryHandle,
+        "experiment-index.json"
+      );
+      data = JSON.parse(await file.text());
+    } catch (error) {
+      file = await readFileFromDirectory(directoryHandle, "summary.json");
+      data = JSON.parse(await file.text());
+      indexPath = "summary.json";
+    }
+
+    if (Array.isArray(data)) {
+      const legacy = buildLegacyIndex(data, {
+        summaryPath: indexPath,
+        summaryUrl: null
+      });
+      state.indexData = legacy.indexData;
+      state.source = {
+        type: "fs",
+        directoryHandle,
+        indexPath,
+        summaryMode: "inline"
+      };
+      legacy.summaries.forEach((entry) =>
+        state.summaryCache.set(entry.run_id, entry)
+      );
+      setIndexMeta({ sourceLabel: "Legacy summary.json", indexPath });
+    } else {
+      state.indexData = data;
+      state.source = {
+        type: "fs",
+        directoryHandle,
+        indexPath
+      };
+      setIndexMeta({ sourceLabel: "Local folder", indexPath });
+    }
+
     updateQueryParam("");
-    setIndexMeta({ sourceLabel: "Local folder", indexPath: "experiment-index.json" });
     elements.indexInput.value = "";
   } catch (error) {
     state.indexError =
@@ -681,6 +832,63 @@ function attachEventHandlers() {
 
   elements.loadMock.addEventListener("click", () => {
     loadIndexFromFetch(DEFAULT_INDEX_PATH, true);
+  });
+
+  elements.loadLegacy.addEventListener("click", () => {
+    elements.legacyFile.click();
+  });
+
+  elements.legacyFile.addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    if (!file) {
+      return;
+    }
+
+    state.indexLoading = true;
+    state.indexError = null;
+    state.indexData = null;
+    state.summaryCache.clear();
+    state.selectedRunId = null;
+    renderRunList();
+    renderDetail();
+
+    try {
+      const data = JSON.parse(await file.text());
+      if (!Array.isArray(data)) {
+        throw new Error("Expected legacy summary.json array.");
+      }
+
+      const legacy = buildLegacyIndex(data, {
+        summaryPath: file.name,
+        summaryUrl: null
+      });
+      state.indexData = legacy.indexData;
+      state.source = { type: "file", summaryMode: "inline" };
+      legacy.summaries.forEach((entry) =>
+        state.summaryCache.set(entry.run_id, entry)
+      );
+      setIndexMeta({ sourceLabel: "Summary file", indexPath: file.name });
+      updateQueryParam("");
+      elements.indexInput.value = "";
+    } catch (error) {
+      state.indexError = error.message || "Unable to load summary.json file.";
+      state.source = null;
+      setIndexMeta({ sourceLabel: "—", indexPath: "—" });
+    } finally {
+      state.indexLoading = false;
+      renderFilters();
+      syncSelection();
+      renderRunList();
+      if (state.selectedRunId) {
+        const run = getFilteredRuns().find(
+          (item) => item.run_id === state.selectedRunId
+        );
+        if (run) {
+          loadSummary(run);
+        }
+      }
+      event.target.value = "";
+    }
   });
 
   elements.reloadIndex.addEventListener("click", () => {

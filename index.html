@@ -47,6 +47,9 @@
             <button id="load-mock" class="action-button secondary">
               Load mock data
             </button>
+            <button id="load-legacy" class="action-button secondary">
+              Load summary.json
+            </button>
             <button id="reload-index" class="action-button ghost">
               Reload
             </button>
@@ -106,6 +109,13 @@
         </section>
       </main>
     </div>
+
+    <input
+      id="legacy-file"
+      type="file"
+      accept=".json"
+      style="display: none"
+    />
 
     <script src="app.js"></script>
   </body>
