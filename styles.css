@@ -55,6 +55,16 @@ a:hover {
   text-decoration: underline;
 }
 
+button,
+input,
+select {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
 .app-shell {
   max-width: 1200px;
   margin: 0 auto;
@@ -99,7 +109,7 @@ a:hover {
   border-radius: var(--radius);
   border: 1px solid var(--card-border);
   box-shadow: 0 12px 24px var(--shadow);
-  min-width: 220px;
+  min-width: 240px;
   display: grid;
   gap: 10px;
   backdrop-filter: blur(8px);
@@ -116,6 +126,7 @@ a:hover {
   display: block;
   font-weight: 600;
   margin-top: 4px;
+  word-break: break-all;
 }
 
 .panel {
@@ -128,30 +139,73 @@ a:hover {
 
 .controls {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
   align-items: end;
 }
 
-.controls label {
+.control-block label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   font-weight: 600;
 }
 
-.controls select {
+.controls select,
+.index-input input {
   width: 100%;
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid var(--card-border);
   background: white;
-  font-family: inherit;
   font-size: 0.95rem;
 }
 
-.controls .help {
-  font-size: 0.9rem;
+.index-input {
+  display: flex;
+  gap: 8px;
+}
+
+.index-input input {
+  flex: 1;
+}
+
+.source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.action-button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 8px 16px rgba(31, 122, 116, 0.2);
+}
+
+.action-button:hover {
+  transform: translateY(-1px);
+}
+
+.action-button.secondary {
+  background: rgba(31, 122, 116, 0.12);
+  color: var(--accent-strong);
+  border: 1px solid rgba(31, 122, 116, 0.3);
+  box-shadow: none;
+}
+
+.action-button.ghost {
+  background: transparent;
   color: var(--muted);
+  border: 1px dashed rgba(95, 90, 82, 0.3);
+  box-shadow: none;
+}
+
+.controls .muted {
+  margin-top: 8px;
 }
 
 .grid {
@@ -165,6 +219,7 @@ a:hover {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  gap: 12px;
 }
 
 .panel-header h2 {
@@ -195,7 +250,6 @@ a:hover {
   padding: 16px 18px;
   background: white;
   text-align: left;
-  cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -308,6 +362,21 @@ a:hover {
   gap: 8px;
 }
 
+.link-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.link-row button {
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(31, 122, 116, 0.3);
+  background: rgba(31, 122, 116, 0.08);
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
 .chip {
   padding: 6px 12px;
   border-radius: 999px;
@@ -368,6 +437,10 @@ a:hover {
 
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .index-input {
+    flex-direction: column;
   }
 }
 

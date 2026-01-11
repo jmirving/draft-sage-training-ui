@@ -19,42 +19,39 @@ Visualization UI for DraftSage training experiments.
 ## Outputs
 - Read-only dashboards and experiment catalog views
 
-## Quick start
-```bash
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173/` to load the default mock data.
+## Quick start (no build step)
+Open `index.html` in your browser. The UI can load experiment metadata using
+the built-in folder picker (Chrome/Edge) or by fetching a URL.
 
 ## Configure the experiment index
-The UI reads the index via a query param:
+The UI reads the index via a query param when served over HTTP:
 
 ```
-http://localhost:5173/?index=/mock/experiment-index.json
+http://localhost:8000/?index=/experiments/experiment-index.json
 ```
 
 The `summary_path` values in the index are resolved relative to the index file.
 
-## Point at local experiment outputs
-For local-only usage, keep everything same-origin so the browser does not block
-the fetches:
+## Load local experiment outputs (no server)
+Use the **Select output folder** button in the UI to pick a training output
+directory that contains `experiment-index.json`. This uses the File System
+Access API, so it works best in Chromium-based browsers.
 
-1. Copy or symlink the training output directory into `public/experiments/`.
-2. Use `?index=/experiments/experiment-index.json`.
+## Load local experiment outputs (HTTP)
+If you prefer the query param path, serve the repo from a simple local server
+so the browser can fetch JSON:
 
-Example:
 ```bash
-ln -s /absolute/path/to/training-output ./public/experiments
+python -m http.server 8000
 ```
 
-Then open:
+Then open (adjust the path as needed):
 ```
-http://localhost:5173/?index=/experiments/experiment-index.json
+http://localhost:8000/?index=/experiments/experiment-index.json
 ```
 
 ## Mock data
-Sample data lives in `public/mock/` and follows the UI contract. It includes:
-- `public/mock/experiment-index.json`
+Sample data lives in `mock/` and follows the UI contract. It includes:
+- `mock/experiment-index.json`
 - Per-run `summary.json`, `config.json`, and `metrics.json`
-- Dataset manifests under `public/mock/manifests/`
+- Dataset manifests under `mock/manifests/`
