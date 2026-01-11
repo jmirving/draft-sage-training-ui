@@ -7,23 +7,23 @@ const STATUS_LABELS = {
   canceled: "Canceled"
 };
 
-const DEFAULT_INDEX_PATH = "mock/experiment-index.json";
-
 const state = {
-  source: null,
   indexData: null,
   indexLoading: false,
   indexError: null,
   summaryCache: new Map(),
   summaryLoading: false,
   summaryError: null,
+  summaryInline: false,
   selectedRunId: null,
   statusFilter: "all",
-  categoryFilter: "all"
+  categoryFilter: "all",
+  sourceType: null,
+  indexPath: null,
+  indexUrl: null
 };
 
 const elements = {
-  sourceLabel: document.getElementById("source-label"),
   indexPath: document.getElementById("index-path"),
   indexUpdated: document.getElementById("index-updated"),
   statusFilter: document.getElementById("status-filter"),
@@ -35,11 +35,8 @@ const elements = {
   detailBody: document.getElementById("detail-body"),
   detailStatus: document.getElementById("detail-status"),
   indexInput: document.getElementById("index-input"),
-  pickDirectory: document.getElementById("pick-directory"),
-  loadMock: document.getElementById("load-mock"),
-  loadLegacy: document.getElementById("load-legacy"),
-  reloadIndex: document.getElementById("reload-index"),
   loadIndex: document.getElementById("load-index"),
+  loadLegacy: document.getElementById("load-legacy"),
   legacyFile: document.getElementById("legacy-file")
 };
 
@@ -64,34 +61,6 @@ function formatNumber(value, digits = 3) {
   return value.toFixed(digits);
 }
 
-function normalizeSegments(segments) {
-  const stack = [];
-
-  for (const segment of segments) {
-    if (!segment || segment === ".") {
-      continue;
-    }
-    if (segment === "..") {
-      stack.pop();
-      continue;
-    }
-    stack.push(segment);
-  }
-
-  return stack;
-}
-
-function resolveFsPath(basePath, relativePath) {
-  if (!relativePath) {
-    return null;
-  }
-
-  const baseSegments = normalizeSegments(basePath.split("/"));
-  baseSegments.pop();
-  const combined = normalizeSegments([...baseSegments, ...relativePath.split("/")]);
-  return combined.join("/");
-}
-
 function updateQueryParam(path) {
   const url = new URL(window.location.href);
   if (path) {
@@ -102,6 +71,7 @@ function updateQueryParam(path) {
   window.history.replaceState({}, "", url);
 }
 
+// Map legacy summary.json arrays into the v1 index + summary cache.
 function buildLegacyIndex(summaryRows, summaryLocation) {
   const generatedAt = new Date().toISOString();
   const runs = [];
@@ -135,7 +105,6 @@ function buildLegacyIndex(summaryRows, summaryLocation) {
     summaries.push({
       run_id: runId,
       summaryUrl: summaryLocation.summaryUrl,
-      summaryPath: summaryLocation.summaryPath,
       data: {
         schema_version: "1.0",
         run_id: runId,
@@ -223,8 +192,7 @@ function getFilteredRuns() {
   });
 }
 
-function setIndexMeta({ sourceLabel, indexPath }) {
-  elements.sourceLabel.textContent = sourceLabel || "—";
+function setIndexMeta(indexPath) {
   elements.indexPath.textContent = indexPath || "—";
   elements.indexUpdated.textContent = formatDate(state.indexData?.generated_at);
 }
@@ -251,7 +219,6 @@ function clearDetailState() {
 
 function renderFilters() {
   const runs = getRuns();
-
   const statusOptions = buildFilterOptions(runs, "status", STATUS_ORDER);
   const categoryOptions = buildFilterOptions(runs, "category");
 
@@ -394,7 +361,7 @@ function renderDetail() {
 
   const summaryEntry = state.summaryCache.get(selectedRun.run_id);
   if (!summaryEntry) {
-    setDetailState("Select a run to see its details.");
+    setDetailState("Summary not loaded for this run.", "error");
     return;
   }
 
@@ -513,8 +480,8 @@ function createArtifactLink(label, relativePath, summaryEntry) {
   const wrapper = document.createElement("div");
   wrapper.className = "link-row";
 
-  if (state.source?.type === "fetch") {
-    const href = resolveFromSummary(summaryEntry, relativePath);
+  if (state.sourceType === "fetch") {
+    const href = new URL(relativePath, summaryEntry.summaryUrl).toString();
     const link = document.createElement("a");
     link.href = href;
     link.textContent = label;
@@ -524,76 +491,16 @@ function createArtifactLink(label, relativePath, summaryEntry) {
     return wrapper;
   }
 
-  if (state.source?.type === "fs") {
-    const text = document.createElement("span");
-    text.textContent = label;
-    wrapper.appendChild(text);
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = "Open";
-    button.addEventListener("click", () =>
-      openFsArtifact(summaryEntry.summaryPath, relativePath)
-    );
-    wrapper.appendChild(button);
-    return wrapper;
-  }
-
   const text = document.createElement("span");
   text.textContent = label;
   wrapper.appendChild(text);
 
   const note = document.createElement("span");
   note.className = "muted";
-  note.textContent = "Use folder picker for file access.";
+  note.textContent = "Serve over HTTP to open.";
   wrapper.appendChild(note);
 
   return wrapper;
-}
-
-function resolveFromSummary(summaryEntry, relativePath) {
-  if (!summaryEntry?.summaryUrl || !relativePath) {
-    return "#";
-  }
-  return new URL(relativePath, summaryEntry.summaryUrl).toString();
-}
-
-async function openFsArtifact(summaryPath, relativePath) {
-  if (!state.source?.directoryHandle) {
-    return;
-  }
-
-  try {
-    const resolvedPath = resolveFsPath(summaryPath, relativePath);
-    const file = await readFileFromDirectory(state.source.directoryHandle, resolvedPath);
-    const url = URL.createObjectURL(file);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.target = "_blank";
-    anchor.rel = "noreferrer";
-    anchor.click();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  } catch (error) {
-    state.summaryError = error.message || "Unable to open file.";
-    renderDetail();
-  }
-}
-
-async function readFileFromDirectory(directoryHandle, relativePath) {
-  const parts = normalizeSegments(relativePath.split("/"));
-  let handle = directoryHandle;
-
-  for (let index = 0; index < parts.length; index += 1) {
-    const part = parts[index];
-    const isFile = index === parts.length - 1;
-    if (isFile) {
-      const fileHandle = await handle.getFileHandle(part);
-      return await fileHandle.getFile();
-    }
-    handle = await handle.getDirectoryHandle(part);
-  }
-
-  throw new Error("Invalid path.");
 }
 
 function selectRun(runId) {
@@ -621,7 +528,7 @@ function syncSelection() {
 }
 
 async function loadSummary(run) {
-  if (state.source?.summaryMode === "inline") {
+  if (state.summaryInline) {
     state.summaryLoading = false;
     state.summaryError = null;
     renderDetail();
@@ -640,30 +547,16 @@ async function loadSummary(run) {
   renderDetail();
 
   try {
-    if (state.source?.type === "fetch") {
-      const summaryUrl = new URL(run.summary_path, state.source.indexUrl).toString();
-      const response = await fetch(summaryUrl);
-      if (!response.ok) {
-        throw new Error(`Summary fetch failed (${response.status})`);
-      }
-      const data = await response.json();
-      state.summaryCache.set(run.run_id, {
-        data,
-        summaryUrl,
-        summaryPath: run.summary_path
-      });
-    } else if (state.source?.type === "fs") {
-      const file = await readFileFromDirectory(
-        state.source.directoryHandle,
-        run.summary_path
-      );
-      const data = JSON.parse(await file.text());
-      state.summaryCache.set(run.run_id, {
-        data,
-        summaryUrl: null,
-        summaryPath: run.summary_path
-      });
+    const summaryUrl = new URL(run.summary_path, state.indexUrl).toString();
+    const response = await fetch(summaryUrl);
+    if (!response.ok) {
+      throw new Error(`Summary fetch failed (${response.status})`);
     }
+    const data = await response.json();
+    state.summaryCache.set(run.run_id, {
+      data,
+      summaryUrl
+    });
   } catch (error) {
     state.summaryError = error.message || "Unable to load summary.";
   } finally {
@@ -696,30 +589,32 @@ async function loadIndexFromFetch(path, updateUrl) {
         summaryUrl: indexUrl
       });
       state.indexData = legacy.indexData;
-      state.source = {
-        type: "fetch",
-        indexPath: path,
-        indexUrl,
-        summaryMode: "inline"
-      };
+      state.sourceType = "fetch";
+      state.summaryInline = true;
       legacy.summaries.forEach((entry) =>
         state.summaryCache.set(entry.run_id, entry)
       );
-      setIndexMeta({ sourceLabel: "Legacy summary.json", indexPath: path });
+      setIndexMeta(path);
     } else {
       state.indexData = data;
-      state.source = { type: "fetch", indexPath: path, indexUrl };
-      setIndexMeta({ sourceLabel: "URL", indexPath: path });
+      state.sourceType = "fetch";
+      state.summaryInline = false;
+      state.indexUrl = indexUrl;
+      setIndexMeta(path);
     }
 
+    state.indexPath = path;
     if (updateUrl) {
       updateQueryParam(path);
     }
     elements.indexInput.value = path;
   } catch (error) {
     state.indexError = error.message || "Unable to load experiment index.";
-    state.source = null;
-    setIndexMeta({ sourceLabel: "—", indexPath: "—" });
+    state.sourceType = null;
+    state.summaryInline = false;
+    state.indexPath = null;
+    state.indexUrl = null;
+    setIndexMeta(null);
   } finally {
     state.indexLoading = false;
     renderFilters();
@@ -734,7 +629,7 @@ async function loadIndexFromFetch(path, updateUrl) {
   }
 }
 
-async function loadIndexFromDirectory(directoryHandle) {
+async function loadLegacyFile(file) {
   state.indexLoading = true;
   state.indexError = null;
   state.indexData = null;
@@ -744,55 +639,33 @@ async function loadIndexFromDirectory(directoryHandle) {
   renderDetail();
 
   try {
-    let file = null;
-    let data = null;
-    let indexPath = "experiment-index.json";
-
-    try {
-      file = await readFileFromDirectory(
-        directoryHandle,
-        "experiment-index.json"
-      );
-      data = JSON.parse(await file.text());
-    } catch (error) {
-      file = await readFileFromDirectory(directoryHandle, "summary.json");
-      data = JSON.parse(await file.text());
-      indexPath = "summary.json";
+    const data = JSON.parse(await file.text());
+    if (!Array.isArray(data)) {
+      throw new Error("Expected summary.json array.");
     }
 
-    if (Array.isArray(data)) {
-      const legacy = buildLegacyIndex(data, {
-        summaryPath: indexPath,
-        summaryUrl: null
-      });
-      state.indexData = legacy.indexData;
-      state.source = {
-        type: "fs",
-        directoryHandle,
-        indexPath,
-        summaryMode: "inline"
-      };
-      legacy.summaries.forEach((entry) =>
-        state.summaryCache.set(entry.run_id, entry)
-      );
-      setIndexMeta({ sourceLabel: "Legacy summary.json", indexPath });
-    } else {
-      state.indexData = data;
-      state.source = {
-        type: "fs",
-        directoryHandle,
-        indexPath
-      };
-      setIndexMeta({ sourceLabel: "Local folder", indexPath });
-    }
-
+    const legacy = buildLegacyIndex(data, {
+      summaryPath: file.name,
+      summaryUrl: null
+    });
+    state.indexData = legacy.indexData;
+    state.sourceType = "file";
+    state.summaryInline = true;
+    state.indexPath = file.name;
+    state.indexUrl = null;
+    legacy.summaries.forEach((entry) =>
+      state.summaryCache.set(entry.run_id, entry)
+    );
+    setIndexMeta(file.name);
     updateQueryParam("");
     elements.indexInput.value = "";
   } catch (error) {
-    state.indexError =
-      error.message || "Unable to load experiment-index.json from the folder.";
-    state.source = null;
-    setIndexMeta({ sourceLabel: "—", indexPath: "—" });
+    state.indexError = error.message || "Unable to load summary.json file.";
+    state.sourceType = null;
+    state.summaryInline = false;
+    state.indexPath = null;
+    state.indexUrl = null;
+    setIndexMeta(null);
   } finally {
     state.indexLoading = false;
     renderFilters();
@@ -830,10 +703,6 @@ function attachEventHandlers() {
     loadIndexFromFetch(path, true);
   });
 
-  elements.loadMock.addEventListener("click", () => {
-    loadIndexFromFetch(DEFAULT_INDEX_PATH, true);
-  });
-
   elements.loadLegacy.addEventListener("click", () => {
     elements.legacyFile.click();
   });
@@ -843,80 +712,8 @@ function attachEventHandlers() {
     if (!file) {
       return;
     }
-
-    state.indexLoading = true;
-    state.indexError = null;
-    state.indexData = null;
-    state.summaryCache.clear();
-    state.selectedRunId = null;
-    renderRunList();
-    renderDetail();
-
-    try {
-      const data = JSON.parse(await file.text());
-      if (!Array.isArray(data)) {
-        throw new Error("Expected legacy summary.json array.");
-      }
-
-      const legacy = buildLegacyIndex(data, {
-        summaryPath: file.name,
-        summaryUrl: null
-      });
-      state.indexData = legacy.indexData;
-      state.source = { type: "file", summaryMode: "inline" };
-      legacy.summaries.forEach((entry) =>
-        state.summaryCache.set(entry.run_id, entry)
-      );
-      setIndexMeta({ sourceLabel: "Summary file", indexPath: file.name });
-      updateQueryParam("");
-      elements.indexInput.value = "";
-    } catch (error) {
-      state.indexError = error.message || "Unable to load summary.json file.";
-      state.source = null;
-      setIndexMeta({ sourceLabel: "—", indexPath: "—" });
-    } finally {
-      state.indexLoading = false;
-      renderFilters();
-      syncSelection();
-      renderRunList();
-      if (state.selectedRunId) {
-        const run = getFilteredRuns().find(
-          (item) => item.run_id === state.selectedRunId
-        );
-        if (run) {
-          loadSummary(run);
-        }
-      }
-      event.target.value = "";
-    }
-  });
-
-  elements.reloadIndex.addEventListener("click", () => {
-    if (state.source?.type === "fetch") {
-      loadIndexFromFetch(state.source.indexPath, false);
-      return;
-    }
-    if (state.source?.type === "fs") {
-      loadIndexFromDirectory(state.source.directoryHandle);
-      return;
-    }
-    loadIndexFromFetch(DEFAULT_INDEX_PATH, true);
-  });
-
-  elements.pickDirectory.addEventListener("click", async () => {
-    if (!window.showDirectoryPicker) {
-      state.indexError = "Directory picker is only supported in Chromium browsers.";
-      renderRunList();
-      return;
-    }
-
-    try {
-      const directoryHandle = await window.showDirectoryPicker();
-      await loadIndexFromDirectory(directoryHandle);
-    } catch (error) {
-      state.indexError = error.message || "Unable to access the selected folder.";
-      renderRunList();
-    }
+    await loadLegacyFile(file);
+    event.target.value = "";
   });
 }
 
@@ -933,7 +730,7 @@ function init() {
     return;
   }
 
-  setIndexMeta({ sourceLabel: "—", indexPath: "—" });
+  setIndexMeta(null);
 }
 
 init();

@@ -20,8 +20,8 @@ Visualization UI for DraftSage training experiments.
 - Read-only dashboards and experiment catalog views
 
 ## Quick start (no build step)
-Open `index.html` in your browser. The UI can load experiment metadata using
-the built-in folder picker (Chrome/Edge) or by fetching a URL.
+Open `index.html` in your browser. Load data by either selecting a legacy
+`summary.json` file or by entering an index URL served over HTTP.
 
 ## Configure the experiment index
 The UI reads the index via a query param when served over HTTP:
@@ -38,11 +38,6 @@ Older runs may only provide a root-level `summary.json` array (for example,
 The UI can load this directly:
 - Click **Load summary.json** and select the file, or
 - Serve the file over HTTP and use `?index=/path/to/summary.json`.
-
-## Load local experiment outputs (no server)
-Use the **Select output folder** button in the UI to pick a training output
-directory that contains `experiment-index.json`. This uses the File System
-Access API, so it works best in Chromium-based browsers.
 
 ## Load local experiment outputs (HTTP)
 If you prefer the query param path, serve the repo from a simple local server

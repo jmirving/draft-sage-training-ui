@@ -23,10 +23,6 @@
         </div>
         <div class="header-meta">
           <div>
-            <span class="label">Source</span>
-            <span id="source-label" class="value">—</span>
-          </div>
-          <div>
             <span class="label">Index path</span>
             <span id="index-path" class="value">—</span>
           </div>
@@ -39,39 +35,28 @@
 
       <section class="panel controls">
         <div class="control-block">
-          <label>Data source</label>
-          <div class="source-actions">
-            <button id="pick-directory" class="action-button">
-              Select output folder
-            </button>
-            <button id="load-mock" class="action-button secondary">
-              Load mock data
-            </button>
-            <button id="load-legacy" class="action-button secondary">
-              Load summary.json
-            </button>
-            <button id="reload-index" class="action-button ghost">
-              Reload
-            </button>
-          </div>
-          <p class="muted" id="source-hint">
-            Tip: use <code>?index=/path/to/experiment-index.json</code> if you
-            are serving files over HTTP.
-          </p>
-        </div>
-
-        <div class="control-block">
-          <label for="index-input">Index URL (optional)</label>
+          <label for="index-input">Index URL</label>
           <div class="index-input">
             <input
               id="index-input"
               type="text"
               placeholder="/experiments/experiment-index.json"
             />
-            <button id="load-index" class="action-button">Load URL</button>
+            <button id="load-index" class="action-button">Load</button>
           </div>
           <p class="muted">
-            This updates the query param so the URL is easy to share.
+            Serve files over HTTP and use <code>?index=/path/to/experiment-index.json</code>.
+            Try <code>mock/experiment-index.json</code> for sample data.
+          </p>
+        </div>
+
+        <div class="control-block">
+          <label>Legacy summary.json</label>
+          <button id="load-legacy" class="action-button secondary">
+            Load summary.json
+          </button>
+          <p class="muted">
+            Use this when opening the UI directly from the filesystem.
           </p>
         </div>
 

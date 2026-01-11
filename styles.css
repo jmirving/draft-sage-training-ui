@@ -169,12 +169,6 @@ button {
   flex: 1;
 }
 
-.source-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
 .action-button {
   background: var(--accent);
   color: white;
@@ -194,13 +188,6 @@ button {
   background: rgba(31, 122, 116, 0.12);
   color: var(--accent-strong);
   border: 1px solid rgba(31, 122, 116, 0.3);
-  box-shadow: none;
-}
-
-.action-button.ghost {
-  background: transparent;
-  color: var(--muted);
-  border: 1px dashed rgba(95, 90, 82, 0.3);
   box-shadow: none;
 }
 
@@ -366,15 +353,6 @@ button {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.link-row button {
-  padding: 6px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(31, 122, 116, 0.3);
-  background: rgba(31, 122, 116, 0.08);
-  color: var(--accent-strong);
-  font-weight: 600;
 }
 
 .chip {
