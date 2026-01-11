@@ -34,6 +34,8 @@ const elements = {
   detailState: document.getElementById("detail-state"),
   detailBody: document.getElementById("detail-body"),
   detailStatus: document.getElementById("detail-status"),
+  bestGrid: document.getElementById("best-grid"),
+  bestCount: document.getElementById("best-count"),
   indexInput: document.getElementById("index-input"),
   loadIndex: document.getElementById("load-index"),
   loadLegacy: document.getElementById("load-legacy"),
@@ -214,6 +216,69 @@ function formatDatasetValue(summary, fallbackRunId) {
   return "—";
 }
 
+function getRunAccuracy(run) {
+  const accuracy = run?.metrics?.accuracy;
+  return typeof accuracy === "number" && !Number.isNaN(accuracy) ? accuracy : null;
+}
+
+function getRunLoss(run) {
+  const loss = run?.metrics?.loss;
+  return typeof loss === "number" && !Number.isNaN(loss) ? loss : null;
+}
+
+function compareRuns(a, b) {
+  const aAcc = getRunAccuracy(a);
+  const bAcc = getRunAccuracy(b);
+  if (aAcc !== null && bAcc !== null) {
+    return bAcc - aAcc;
+  }
+  if (aAcc !== null) {
+    return -1;
+  }
+  if (bAcc !== null) {
+    return 1;
+  }
+
+  const aLoss = getRunLoss(a);
+  const bLoss = getRunLoss(b);
+  if (aLoss !== null && bLoss !== null) {
+    return aLoss - bLoss;
+  }
+  if (aLoss !== null) {
+    return -1;
+  }
+  if (bLoss !== null) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function getBestRunsByCategory(runs) {
+  const bestByCategory = new Map();
+
+  runs.forEach((run) => {
+    if (run?.status && run.status !== "completed") {
+      return;
+    }
+
+    const hasMetrics = getRunAccuracy(run) !== null || getRunLoss(run) !== null;
+    if (!hasMetrics) {
+      return;
+    }
+
+    const category = run.category || "uncategorized";
+    const existing = bestByCategory.get(category);
+    if (!existing || compareRuns(run, existing) < 0) {
+      bestByCategory.set(category, run);
+    }
+  });
+
+  return Array.from(bestByCategory.entries())
+    .map(([category, run]) => ({ category, run }))
+    .sort((a, b) => a.category.localeCompare(b.category));
+}
+
 function buildFilterOptions(runs, key, order) {
   const values = runs
     .map((run) => run?.[key])
@@ -333,6 +398,7 @@ function renderRunList() {
 
   if (runs.length === 0) {
     setListState("No runs match the current filters.", "empty");
+    renderBestGrid();
     return;
   }
 
@@ -383,6 +449,8 @@ function renderRunList() {
     card.appendChild(meta);
     elements.runList.appendChild(card);
   });
+
+  renderBestGrid();
 }
 
 function createMetaField(label, value) {
@@ -400,6 +468,61 @@ function createMetaField(label, value) {
   wrapper.appendChild(valueEl);
 
   return wrapper;
+}
+
+function renderBestGrid() {
+  const bestRuns = getBestRunsByCategory(getRuns());
+  elements.bestGrid.innerHTML = "";
+  elements.bestCount.textContent = `${bestRuns.length} categories`;
+
+  if (!state.indexData) {
+    elements.bestGrid.innerHTML = "<p class=\"best-empty\">Load data to see best runs.</p>";
+    return;
+  }
+
+  if (bestRuns.length === 0) {
+    elements.bestGrid.innerHTML =
+      "<p class=\"best-empty\">No completed runs with metrics yet.</p>";
+    return;
+  }
+
+  bestRuns.forEach(({ category, run }) => {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "best-card";
+    card.addEventListener("click", () => focusOnRun(run));
+
+    const title = document.createElement("h3");
+    title.textContent = category;
+
+    const name = document.createElement("p");
+    name.className = "muted";
+    name.textContent = run.display_name || run.run_id;
+
+    const metrics = document.createElement("div");
+    metrics.className = "best-metrics";
+    metrics.appendChild(
+      createMetaField("Accuracy", formatNumber(getRunAccuracy(run)))
+    );
+    metrics.appendChild(
+      createMetaField("Loss", formatNumber(getRunLoss(run)))
+    );
+
+    card.appendChild(title);
+    card.appendChild(name);
+    card.appendChild(metrics);
+
+    elements.bestGrid.appendChild(card);
+  });
+}
+
+function focusOnRun(run) {
+  const categoryValue = run.category || "all";
+  state.statusFilter = "all";
+  state.categoryFilter = categoryValue;
+
+  renderFilters();
+  selectRun(run.run_id);
 }
 
 function renderDetail() {
