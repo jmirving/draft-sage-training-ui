@@ -91,11 +91,22 @@ function updateQueryParam(path) {
   window.history.replaceState({}, "", url);
 }
 
+function inferLegacyDatasetLabel(rows) {
+  const hasPatchWindow = rows.some(
+    (row) => row.patch_window || (Array.isArray(row.patches) && row.patches.length)
+  );
+  if (hasPatchWindow) {
+    return "Patch window";
+  }
+  return "Clean 2025";
+}
+
 // Map legacy summary.json arrays into the v1 index + summary cache.
 function buildLegacyIndex(summaryRows, summaryLocation) {
   const generatedAt = new Date().toISOString();
   const runs = [];
   const summaries = [];
+  const legacyDataset = { label: inferLegacyDatasetLabel(summaryRows) };
 
   summaryRows.forEach((row) => {
     const runId = row.run_id || row.runId || row.id || row.experiment;
@@ -115,6 +126,7 @@ function buildLegacyIndex(summaryRows, summaryLocation) {
       display_name: experiment,
       status: "completed",
       category,
+      dataset: legacyDataset,
       metrics: {
         accuracy: row.test_accuracy ?? null,
         loss: row.test_loss ?? null,
@@ -137,6 +149,7 @@ function buildLegacyIndex(summaryRows, summaryLocation) {
           ? `Feature set: ${row.feature_set.join(", ")}`
           : "Legacy training run summary.",
         category,
+        dataset: legacyDataset,
         progress: row.epochs ? { epoch: row.epochs, epochs: row.epochs } : null,
         metrics: {
           accuracy: row.test_accuracy ?? null,
@@ -170,6 +183,10 @@ function buildLegacyIndex(summaryRows, summaryLocation) {
 }
 
 function formatDatasetValue(summary, fallbackRunId) {
+  if (summary?.dataset?.label) {
+    return summary.dataset.label;
+  }
+
   if (summary?.dataset?.window) {
     return `${summary.dataset.window.start} to ${summary.dataset.window.end}`;
   }
@@ -359,7 +376,7 @@ function renderRunList() {
     );
     const windowValue = run.dataset?.window
       ? `${run.dataset.window.start} to ${run.dataset.window.end}`
-      : "—";
+      : run.dataset?.label || "—";
     meta.appendChild(createMetaField("Window", windowValue));
 
     card.appendChild(top);
@@ -478,12 +495,6 @@ function renderDetail() {
       createMetaField("Best val loss", formatNumber(summary?.metrics?.best_val_loss))
     );
   }
-  const topKValue = summary?.metrics?.top_k
-    ? `${summary.metrics.top_k.k}: ${formatNumber(
-        summary.metrics.top_k.accuracy
-      )}`
-    : "—";
-  metrics.appendChild(createMetaField("Top-K", topKValue));
 
   const artifacts = document.createElement("div");
   artifacts.className = "links";
