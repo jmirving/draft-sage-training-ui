@@ -1,0 +1,5 @@
+{
+  "window": "2025-01-01 to 2025-12-31",
+  "source": "lol-pro-data-processor",
+  "notes": "Clean 2025-only training dataset."
+}

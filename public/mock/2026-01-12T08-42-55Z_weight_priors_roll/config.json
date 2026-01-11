@@ -1,0 +1,8 @@
+{
+  "run_id": "2026-01-12T08-42-55Z_weight_priors_roll",
+  "seed": 2026,
+  "epochs": 12,
+  "batch_size": 512,
+  "learning_rate": 0.0008,
+  "features": ["league", "team", "patch", "priors"]
+}

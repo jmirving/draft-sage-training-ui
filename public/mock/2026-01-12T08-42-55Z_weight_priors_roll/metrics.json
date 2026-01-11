@@ -1,0 +1,8 @@
+{
+  "accuracy": 0.182,
+  "loss": 1.27,
+  "top_k": {
+    "k": 3,
+    "accuracy": 0.39
+  }
+}

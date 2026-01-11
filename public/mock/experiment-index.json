@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-01-12T09:02:00Z",
+  "runs": [
+    {
+      "run_id": "2026-01-11T18-00-12Z_baseline_2025_clean",
+      "display_name": "Baseline 2025 clean",
+      "status": "completed",
+      "category": "baseline",
+      "dataset": {
+        "source": "lol-pro-data-processor",
+        "window": {
+          "start": "2025-01-01",
+          "end": "2025-12-31"
+        },
+        "manifest_path": "manifests/2025-clean.json"
+      },
+      "metrics": {
+        "accuracy": 0.186,
+        "loss": 1.19,
+        "top_k": {
+          "k": 3,
+          "accuracy": 0.42
+        }
+      },
+      "summary_path": "2026-01-11T18-00-12Z_baseline_2025_clean/summary.json"
+    },
+    {
+      "run_id": "2026-01-12T08-42-55Z_weight_priors_roll",
+      "display_name": "Weight priors + optional inputs",
+      "status": "running",
+      "category": "priors",
+      "dataset": {
+        "source": "lol-pro-data-processor",
+        "window": {
+          "start": "2024-07-01",
+          "end": "2025-12-31"
+        },
+        "manifest_path": "manifests/rolling-window.json"
+      },
+      "metrics": {
+        "accuracy": 0.182,
+        "loss": 1.27,
+        "top_k": {
+          "k": 3,
+          "accuracy": 0.39
+        }
+      },
+      "summary_path": "2026-01-12T08-42-55Z_weight_priors_roll/summary.json"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "window": "2024-07-01 to 2025-12-31",
+  "source": "lol-pro-data-processor",
+  "notes": "Rolling window for priors/weights experiments."
+}
