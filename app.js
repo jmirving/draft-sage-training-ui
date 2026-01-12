@@ -7,6 +7,10 @@ const STATUS_LABELS = {
   failed: "Failed",
   canceled: "Canceled"
 };
+const CATEGORY_LABELS = {
+  priors: "Champion PB weights",
+  "role-priors": "Champion role weights"
+};
 
 const state = {
   indexData: null,
@@ -459,6 +463,20 @@ function buildFilterOptions(runs, key, order) {
   return ["all", ...unique];
 }
 
+function formatCategoryLabel(category) {
+  if (!category) {
+    return "Uncategorized";
+  }
+  if (CATEGORY_LABELS[category]) {
+    return CATEGORY_LABELS[category];
+  }
+  let label = category;
+  label = label.replace(/role-priors/g, "champion role weights");
+  label = label.replace(/priors/g, "champion pb weights");
+  label = label.replace(/-/g, " ");
+  return label;
+}
+
 function populateSelect(select, options, formatter) {
   const current = select.value;
   select.innerHTML = "";
@@ -590,7 +608,7 @@ function renderFilters() {
     option === "all" ? "All statuses" : STATUS_LABELS[option] || option
   );
   populateSelect(elements.categoryFilter, categoryOptions, (option) =>
-    option === "all" ? "All categories" : option
+    option === "all" ? "All categories" : formatCategoryLabel(option)
   );
 
   if (!statusOptions.includes(state.statusFilter)) {
@@ -668,7 +686,9 @@ function renderRunList() {
     const meta = document.createElement("div");
     meta.className = "run-card-meta";
 
-    meta.appendChild(createMetaField("Category", run.category || "—"));
+    meta.appendChild(
+      createMetaField("Category", formatCategoryLabel(run.category))
+    );
     meta.appendChild(
       createMetaField("Accuracy", formatNumber(run.metrics?.accuracy))
     );
@@ -736,7 +756,7 @@ function renderBestGrid() {
     card.addEventListener("click", () => focusOnRun(run));
 
     const title = document.createElement("h3");
-    title.textContent = category;
+    title.textContent = formatCategoryLabel(category);
 
     const name = document.createElement("p");
     name.className = "muted";
@@ -1017,7 +1037,7 @@ function renderDetail() {
   if (selectedRun.category) {
     const chip = document.createElement("span");
     chip.className = "chip";
-    chip.textContent = selectedRun.category;
+    chip.textContent = formatCategoryLabel(selectedRun.category);
     header.appendChild(chip);
   }
 
