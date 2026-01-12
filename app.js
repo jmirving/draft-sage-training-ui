@@ -1,4 +1,5 @@
 const STATUS_ORDER = ["planned", "running", "completed", "failed", "canceled"];
+const DEFAULT_INDEX_PATH = "/.tmp/training-clean-2025-all/experiment-index.json";
 const STATUS_LABELS = {
   planned: "Planned",
   running: "Running",
@@ -1178,7 +1179,8 @@ function init() {
     return;
   }
 
-  setIndexMeta(null);
+  elements.indexInput.value = DEFAULT_INDEX_PATH;
+  loadIndexFromFetch(DEFAULT_INDEX_PATH, false);
 }
 
 init();
