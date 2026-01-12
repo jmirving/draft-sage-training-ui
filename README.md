@@ -23,6 +23,17 @@ Visualization UI for DraftSage training experiments.
 Open `index.html` in your browser. Load data by either selecting a legacy
 `summary.json` file or by entering an index URL served over HTTP.
 
+## Default index (auto-load)
+When the UI is opened without `?index=`, it auto-loads the combined index at:
+
+```
+/.tmp/training-clean-2025-all/experiment-index.json
+```
+
+After new training runs, rebuild the combined index so the default stays current.
+Use `draft-sage-training/scripts/build_combined_index.py` to regenerate the
+combined file.
+
 ## Configure the experiment index
 The UI reads the index via a query param when served over HTTP:
 
