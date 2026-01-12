@@ -386,6 +386,17 @@ function getBestRunsByCategory(runs) {
     .sort((a, b) => a.category.localeCompare(b.category));
 }
 
+function getRunCountsByCategory(runs) {
+  const counts = new Map();
+
+  runs.forEach((run) => {
+    const category = run?.category || "uncategorized";
+    counts.set(category, (counts.get(category) || 0) + 1);
+  });
+
+  return counts;
+}
+
 function buildFilterOptions(runs, key, order) {
   const values = runs
     .map((run) => run?.[key])
@@ -639,7 +650,9 @@ function createMetaField(label, value) {
 }
 
 function renderBestGrid() {
-  const bestRuns = getBestRunsByCategory(getRuns());
+  const runs = getRuns();
+  const bestRuns = getBestRunsByCategory(runs);
+  const runCounts = getRunCountsByCategory(runs);
   elements.bestGrid.innerHTML = "";
   elements.bestCount.textContent = `${bestRuns.length} categories`;
 
@@ -667,6 +680,10 @@ function renderBestGrid() {
     name.className = "muted";
     name.textContent = run.display_name || run.run_id;
 
+    const count = document.createElement("p");
+    count.className = "muted";
+    count.textContent = `${runCounts.get(category) || 0} runs`;
+
     const metrics = document.createElement("div");
     metrics.className = "best-metrics";
     metrics.appendChild(
@@ -678,6 +695,7 @@ function renderBestGrid() {
 
     card.appendChild(title);
     card.appendChild(name);
+    card.appendChild(count);
     card.appendChild(metrics);
 
     elements.bestGrid.appendChild(card);
