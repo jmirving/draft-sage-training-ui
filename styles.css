@@ -184,6 +184,13 @@ button {
   transform: translateY(-1px);
 }
 
+.action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  transform: none;
+  box-shadow: none;
+}
+
 .action-button.secondary {
   background: rgba(31, 122, 116, 0.12);
   color: var(--accent-strong);
@@ -193,6 +200,38 @@ button {
 
 .controls .muted {
   margin-top: 8px;
+}
+
+.refresh-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.refresh-row select {
+  min-width: 120px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.toggle input {
+  accent-color: var(--accent);
+}
+
+.refresh-status.error {
+  color: var(--bad);
+}
+
+.refresh-status.loading {
+  color: var(--accent-strong);
 }
 
 .grid {

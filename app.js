@@ -20,12 +20,19 @@ const state = {
   categoryFilter: "all",
   sourceType: null,
   indexPath: null,
-  indexUrl: null
+  indexUrl: null,
+  refreshEnabled: false,
+  refreshIntervalMs: 30000,
+  refreshTimer: null,
+  lastRefresh: null,
+  refreshError: null,
+  indexRefreshing: false
 };
 
 const elements = {
   indexPath: document.getElementById("index-path"),
   indexUpdated: document.getElementById("index-updated"),
+  indexRefreshed: document.getElementById("index-refreshed"),
   statusFilter: document.getElementById("status-filter"),
   categoryFilter: document.getElementById("category-filter"),
   runCount: document.getElementById("run-count"),
@@ -39,7 +46,11 @@ const elements = {
   indexInput: document.getElementById("index-input"),
   loadIndex: document.getElementById("load-index"),
   loadLegacy: document.getElementById("load-legacy"),
-  legacyFile: document.getElementById("legacy-file")
+  legacyFile: document.getElementById("legacy-file"),
+  refreshButton: document.getElementById("refresh-index"),
+  autoRefresh: document.getElementById("auto-refresh"),
+  refreshInterval: document.getElementById("refresh-interval"),
+  refreshStatus: document.getElementById("refresh-status")
 };
 
 function formatDate(value) {
@@ -63,6 +74,22 @@ function formatNumber(value, digits = 3) {
   return value.toFixed(digits);
 }
 
+function formatInterval(ms) {
+  if (!ms || Number.isNaN(ms)) {
+    return "—";
+  }
+  if (ms < 60000) {
+    return `${Math.round(ms / 1000)}s`;
+  }
+  return `${Math.round(ms / 60000)}m`;
+}
+
+function withCacheBust(url) {
+  const busted = new URL(url);
+  busted.searchParams.set("_", Date.now().toString());
+  return busted.toString();
+}
+
 function parseRunIdTimestamp(runId) {
   if (!runId || typeof runId !== "string") {
     return null;
@@ -81,6 +108,24 @@ function parseRunIdTimestamp(runId) {
   }
 
   return null;
+}
+
+function getCachedSummary(runId) {
+  const entry = state.summaryCache.get(runId);
+  return entry ? entry.data : null;
+}
+
+function formatProgress(summary) {
+  const progress = summary?.progress;
+  if (!progress) {
+    return "—";
+  }
+  const epoch = progress.epoch;
+  const epochs = progress.epochs;
+  if (typeof epoch === "number" && typeof epochs === "number") {
+    return `${epoch}/${epochs}`;
+  }
+  return "—";
 }
 
 function updateQueryParam(path) {
@@ -182,6 +227,67 @@ function buildLegacyIndex(summaryRows, summaryLocation) {
     },
     summaries
   };
+}
+
+async function fetchIndexData(path) {
+  const indexUrl = new URL(path, window.location.href);
+  const response = await fetch(withCacheBust(indexUrl.toString()), {
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    throw new Error(`Index fetch failed (${response.status})`);
+  }
+
+  const data = await response.json();
+  if (Array.isArray(data)) {
+    const legacy = buildLegacyIndex(data, {
+      summaryPath: path,
+      summaryUrl: indexUrl.toString()
+    });
+    return {
+      indexData: legacy.indexData,
+      summaries: legacy.summaries,
+      summaryInline: true,
+      indexPath: path,
+      indexUrl: indexUrl.toString()
+    };
+  }
+
+  return {
+    indexData: data,
+    summaries: null,
+    summaryInline: false,
+    indexPath: path,
+    indexUrl: indexUrl.toString()
+  };
+}
+
+function applyIndexResult(result, options = {}) {
+  const { preserveSelection = false, preserveFilters = false, updateUrl = false } =
+    options;
+  const priorSelection = preserveSelection ? state.selectedRunId : null;
+  const priorStatus = preserveFilters ? state.statusFilter : "all";
+  const priorCategory = preserveFilters ? state.categoryFilter : "all";
+
+  state.indexData = result.indexData;
+  state.sourceType = "fetch";
+  state.summaryInline = result.summaryInline;
+  state.indexPath = result.indexPath;
+  state.indexUrl = result.indexUrl;
+  state.summaryCache.clear();
+  if (Array.isArray(result.summaries)) {
+    result.summaries.forEach((entry) => state.summaryCache.set(entry.run_id, entry));
+  }
+
+  state.selectedRunId = preserveSelection ? priorSelection : null;
+  state.statusFilter = preserveFilters ? priorStatus : "all";
+  state.categoryFilter = preserveFilters ? priorCategory : "all";
+
+  if (updateUrl) {
+    updateQueryParam(state.indexPath);
+  }
+  elements.indexInput.value = state.indexPath;
+  setIndexMeta(state.indexPath);
 }
 
 function formatDatasetValue(summary, fallbackRunId) {
@@ -331,6 +437,7 @@ function getFilteredRuns() {
 function setIndexMeta(indexPath) {
   elements.indexPath.textContent = indexPath || "—";
   elements.indexUpdated.textContent = formatDate(state.indexData?.generated_at);
+  elements.indexRefreshed.textContent = formatDate(state.lastRefresh);
 }
 
 function setListState(message, type) {
@@ -351,6 +458,58 @@ function setDetailState(message, type) {
 
 function clearDetailState() {
   elements.detailState.style.display = "none";
+}
+
+function canRefreshIndex() {
+  return Boolean(state.indexPath && state.sourceType === "fetch");
+}
+
+function updateRefreshControls() {
+  const canRefresh = canRefreshIndex();
+  elements.refreshButton.disabled = !canRefresh || state.indexRefreshing;
+  elements.autoRefresh.disabled = !canRefresh;
+  elements.refreshInterval.disabled = !canRefresh;
+
+  if (!canRefresh && state.refreshEnabled) {
+    state.refreshEnabled = false;
+    elements.autoRefresh.checked = false;
+    updateRefreshTimer();
+  }
+}
+
+function updateRefreshStatus() {
+  let message = "Idle";
+  let className = "muted refresh-status";
+
+  if (!canRefreshIndex()) {
+    message = "Load an HTTP index to enable refresh.";
+  } else if (state.indexRefreshing) {
+    message = "Refreshing...";
+    className += " loading";
+  } else if (state.refreshError) {
+    message = `Refresh failed: ${state.refreshError}`;
+    className += " error";
+  } else if (state.refreshEnabled) {
+    message = `Auto every ${formatInterval(state.refreshIntervalMs)}`;
+  }
+
+  elements.refreshStatus.textContent = message;
+  elements.refreshStatus.className = className;
+}
+
+function updateRefreshTimer() {
+  if (state.refreshTimer) {
+    clearInterval(state.refreshTimer);
+    state.refreshTimer = null;
+  }
+
+  if (!state.refreshEnabled || !canRefreshIndex()) {
+    return;
+  }
+
+  state.refreshTimer = window.setInterval(() => {
+    refreshIndex();
+  }, state.refreshIntervalMs);
 }
 
 function renderFilters() {
@@ -439,6 +598,14 @@ function renderRunList() {
     meta.appendChild(createMetaField("Category", run.category || "—"));
     meta.appendChild(
       createMetaField("Accuracy", formatNumber(run.metrics?.accuracy))
+    );
+    const summary = getCachedSummary(run.run_id);
+    meta.appendChild(createMetaField("Progress", formatProgress(summary)));
+    meta.appendChild(
+      createMetaField(
+        "Updated",
+        summary?.updated_at ? formatDate(summary.updated_at) : "—"
+      )
     );
     const windowValue = run.dataset?.window
       ? `${run.dataset.window.start} to ${run.dataset.window.end}`
@@ -719,28 +886,38 @@ function syncSelection() {
   }
 }
 
-async function loadSummary(run) {
+async function fetchSummary(run, options = {}) {
+  const { silent = false } = options;
+
   if (state.summaryInline) {
-    state.summaryLoading = false;
-    state.summaryError = null;
-    renderDetail();
+    if (!silent) {
+      state.summaryLoading = false;
+      state.summaryError = null;
+      renderDetail();
+    }
     return;
   }
 
   if (!run?.summary_path) {
-    state.summaryError = "Missing summary path for this run.";
-    state.summaryLoading = false;
-    renderDetail();
+    if (!silent) {
+      state.summaryError = "Missing summary path for this run.";
+      state.summaryLoading = false;
+      renderDetail();
+    }
     return;
   }
 
-  state.summaryLoading = true;
-  state.summaryError = null;
-  renderDetail();
+  if (!silent) {
+    state.summaryLoading = true;
+    state.summaryError = null;
+    renderDetail();
+  }
 
   try {
     const summaryUrl = new URL(run.summary_path, state.indexUrl).toString();
-    const response = await fetch(summaryUrl);
+    const response = await fetch(withCacheBust(summaryUrl), {
+      cache: "no-store"
+    });
     if (!response.ok) {
       throw new Error(`Summary fetch failed (${response.status})`);
     }
@@ -750,11 +927,19 @@ async function loadSummary(run) {
       summaryUrl
     });
   } catch (error) {
-    state.summaryError = error.message || "Unable to load summary.";
+    if (!silent) {
+      state.summaryError = error.message || "Unable to load summary.";
+    }
   } finally {
-    state.summaryLoading = false;
-    renderDetail();
+    if (!silent) {
+      state.summaryLoading = false;
+      renderDetail();
+    }
   }
+}
+
+async function loadSummary(run) {
+  await fetchSummary(run);
 }
 
 async function loadIndexFromFetch(path, updateUrl) {
@@ -763,49 +948,25 @@ async function loadIndexFromFetch(path, updateUrl) {
   state.indexData = null;
   state.summaryCache.clear();
   state.selectedRunId = null;
+  state.refreshError = null;
   renderRunList();
   renderDetail();
 
   try {
-    const indexUrl = new URL(path, window.location.href).toString();
-    const response = await fetch(indexUrl);
-    if (!response.ok) {
-      throw new Error(`Index fetch failed (${response.status})`);
-    }
-
-    const data = await response.json();
-
-    if (Array.isArray(data)) {
-      const legacy = buildLegacyIndex(data, {
-        summaryPath: path,
-        summaryUrl: indexUrl
-      });
-      state.indexData = legacy.indexData;
-      state.sourceType = "fetch";
-      state.summaryInline = true;
-      legacy.summaries.forEach((entry) =>
-        state.summaryCache.set(entry.run_id, entry)
-      );
-      setIndexMeta(path);
-    } else {
-      state.indexData = data;
-      state.sourceType = "fetch";
-      state.summaryInline = false;
-      state.indexUrl = indexUrl;
-      setIndexMeta(path);
-    }
-
-    state.indexPath = path;
-    if (updateUrl) {
-      updateQueryParam(path);
-    }
-    elements.indexInput.value = path;
+    const result = await fetchIndexData(path);
+    state.lastRefresh = new Date().toISOString();
+    applyIndexResult(result, {
+      preserveSelection: false,
+      preserveFilters: false,
+      updateUrl
+    });
   } catch (error) {
     state.indexError = error.message || "Unable to load experiment index.";
     state.sourceType = null;
     state.summaryInline = false;
     state.indexPath = null;
     state.indexUrl = null;
+    state.lastRefresh = null;
     setIndexMeta(null);
   } finally {
     state.indexLoading = false;
@@ -818,6 +979,12 @@ async function loadIndexFromFetch(path, updateUrl) {
         loadSummary(run);
       }
     }
+    updateRefreshControls();
+    updateRefreshStatus();
+    updateRefreshTimer();
+    if (state.indexData) {
+      prefetchSummaries(getRuns().filter((run) => run.status === "running"));
+    }
   }
 }
 
@@ -827,6 +994,7 @@ async function loadLegacyFile(file) {
   state.indexData = null;
   state.summaryCache.clear();
   state.selectedRunId = null;
+  state.refreshError = null;
   renderRunList();
   renderDetail();
 
@@ -845,6 +1013,7 @@ async function loadLegacyFile(file) {
     state.summaryInline = true;
     state.indexPath = file.name;
     state.indexUrl = null;
+    state.lastRefresh = new Date().toISOString();
     legacy.summaries.forEach((entry) =>
       state.summaryCache.set(entry.run_id, entry)
     );
@@ -857,6 +1026,7 @@ async function loadLegacyFile(file) {
     state.summaryInline = false;
     state.indexPath = null;
     state.indexUrl = null;
+    state.lastRefresh = null;
     setIndexMeta(null);
   } finally {
     state.indexLoading = false;
@@ -869,6 +1039,71 @@ async function loadLegacyFile(file) {
         loadSummary(run);
       }
     }
+    updateRefreshControls();
+    updateRefreshStatus();
+    updateRefreshTimer();
+  }
+}
+
+async function prefetchSummaries(runs) {
+  if (state.summaryInline || !Array.isArray(runs) || runs.length === 0) {
+    return;
+  }
+
+  const targets = runs.filter((run) => run?.summary_path);
+  if (targets.length === 0) {
+    return;
+  }
+
+  await Promise.all(
+    targets.map((run) =>
+      fetchSummary(run, {
+        silent: true
+      })
+    )
+  );
+
+  renderRunList();
+}
+
+async function refreshIndex() {
+  if (!canRefreshIndex() || state.indexRefreshing) {
+    return;
+  }
+
+  state.indexRefreshing = true;
+  state.refreshError = null;
+  updateRefreshControls();
+  updateRefreshStatus();
+
+  try {
+    const result = await fetchIndexData(state.indexPath);
+    state.lastRefresh = new Date().toISOString();
+    applyIndexResult(result, {
+      preserveSelection: true,
+      preserveFilters: true,
+      updateUrl: false
+    });
+
+    renderFilters();
+    syncSelection();
+    renderRunList();
+
+    if (state.selectedRunId) {
+      const run = getRuns().find((item) => item.run_id === state.selectedRunId);
+      if (run) {
+        loadSummary(run);
+      }
+    }
+
+    await prefetchSummaries(getRuns().filter((run) => run.status === "running"));
+  } catch (error) {
+    state.refreshError = error.message || "Unable to refresh index.";
+  } finally {
+    state.indexRefreshing = false;
+    setIndexMeta(state.indexPath);
+    updateRefreshControls();
+    updateRefreshStatus();
   }
 }
 
@@ -907,6 +1142,23 @@ function attachEventHandlers() {
     await loadLegacyFile(file);
     event.target.value = "";
   });
+
+  elements.refreshButton.addEventListener("click", () => {
+    refreshIndex();
+  });
+
+  elements.autoRefresh.addEventListener("change", (event) => {
+    state.refreshEnabled = event.target.checked;
+    updateRefreshTimer();
+    updateRefreshStatus();
+  });
+
+  elements.refreshInterval.addEventListener("change", (event) => {
+    const value = Number(event.target.value);
+    state.refreshIntervalMs = Number.isNaN(value) ? 30000 : value;
+    updateRefreshTimer();
+    updateRefreshStatus();
+  });
 }
 
 function init() {
@@ -914,6 +1166,10 @@ function init() {
   renderFilters();
   renderRunList();
   renderDetail();
+  state.refreshIntervalMs = Number(elements.refreshInterval.value) || 30000;
+  elements.autoRefresh.checked = state.refreshEnabled;
+  updateRefreshControls();
+  updateRefreshStatus();
 
   const queryIndex = new URLSearchParams(window.location.search).get("index");
   if (queryIndex) {

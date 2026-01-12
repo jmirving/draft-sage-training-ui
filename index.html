@@ -30,6 +30,10 @@
             <span class="label">Updated</span>
             <span id="index-updated" class="value">—</span>
           </div>
+          <div>
+            <span class="label">Last refresh</span>
+            <span id="index-refreshed" class="value">—</span>
+          </div>
         </div>
       </header>
 
@@ -63,6 +67,34 @@
           >
             Load summary.json
           </button>
+        </div>
+
+        <div class="control-block">
+          <label>Refresh</label>
+          <div class="refresh-row">
+            <button
+              id="refresh-index"
+              class="action-button secondary"
+              title="Refresh the experiment index from the current URL."
+              aria-label="Refresh experiment index"
+            >
+              Refresh now
+            </button>
+            <label class="toggle">
+              <input id="auto-refresh" type="checkbox" />
+              <span>Auto</span>
+            </label>
+          </div>
+          <div class="refresh-row">
+            <select id="refresh-interval" aria-label="Auto refresh interval">
+              <option value="15000">15s</option>
+              <option value="30000" selected>30s</option>
+              <option value="60000">60s</option>
+              <option value="120000">120s</option>
+              <option value="300000">300s</option>
+            </select>
+            <span id="refresh-status" class="muted refresh-status" aria-live="polite">Idle</span>
+          </div>
         </div>
 
         <div>
