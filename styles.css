@@ -139,7 +139,7 @@ button {
 
 .panel-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 260px);
   gap: 24px;
   align-items: start;
 }
@@ -156,7 +156,7 @@ button {
   grid-template-columns: 1fr;
   gap: 12px;
   align-items: start;
-  max-width: 320px;
+  max-width: 260px;
   justify-self: end;
 }
 

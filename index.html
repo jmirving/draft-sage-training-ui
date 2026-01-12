@@ -47,65 +47,6 @@
         </section>
 
         <section class="panel controls compact">
-          <div class="control-block">
-            <label for="index-input">Index URL</label>
-            <div class="index-input">
-              <input
-                id="index-input"
-                type="text"
-                placeholder="/experiments/experiment-index.json"
-              />
-              <button
-                id="load-index"
-                class="action-button"
-                title="Load an experiment-index.json (or legacy summary.json) from a URL."
-                aria-label="Load index URL"
-              >
-                Load
-              </button>
-            </div>
-          </div>
-
-          <div class="control-block">
-            <label>Legacy summary.json</label>
-            <button
-              id="load-legacy"
-              class="action-button secondary"
-              title="Load a legacy summary.json file from disk."
-              aria-label="Load legacy summary.json"
-            >
-              Load summary.json
-            </button>
-          </div>
-
-          <div class="control-block">
-            <label>Refresh</label>
-            <div class="refresh-row">
-              <button
-                id="refresh-index"
-                class="action-button secondary"
-                title="Refresh the experiment index from the current URL."
-                aria-label="Refresh experiment index"
-              >
-                Refresh now
-              </button>
-              <label class="toggle">
-                <input id="auto-refresh" type="checkbox" />
-                <span>Auto</span>
-              </label>
-            </div>
-            <div class="refresh-row">
-              <select id="refresh-interval" aria-label="Auto refresh interval">
-                <option value="15000">15s</option>
-                <option value="30000" selected>30s</option>
-                <option value="60000">60s</option>
-                <option value="120000">120s</option>
-                <option value="300000">300s</option>
-              </select>
-              <span id="refresh-status" class="muted refresh-status" aria-live="polite">Idle</span>
-            </div>
-          </div>
-
           <div>
             <label for="status-filter">Status</label>
             <select id="status-filter"></select>
@@ -158,13 +99,6 @@
         </section>
       </main>
     </div>
-
-    <input
-      id="legacy-file"
-      type="file"
-      accept=".json"
-      style="display: none"
-    />
 
     <script src="app.js"></script>
   </body>

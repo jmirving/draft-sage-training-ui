@@ -26,7 +26,7 @@ const state = {
   sourceType: null,
   indexPath: null,
   indexUrl: null,
-  refreshEnabled: false,
+  refreshEnabled: true,
   refreshIntervalMs: 30000,
   refreshTimer: null,
   lastRefresh: null,
@@ -49,14 +49,6 @@ const elements = {
   detailStatus: document.getElementById("detail-status"),
   bestRun: document.getElementById("best-run"),
   bestCount: document.getElementById("best-count"),
-  indexInput: document.getElementById("index-input"),
-  loadIndex: document.getElementById("load-index"),
-  loadLegacy: document.getElementById("load-legacy"),
-  legacyFile: document.getElementById("legacy-file"),
-  refreshButton: document.getElementById("refresh-index"),
-  autoRefresh: document.getElementById("auto-refresh"),
-  refreshInterval: document.getElementById("refresh-interval"),
-  refreshStatus: document.getElementById("refresh-status"),
   accuracyOrder: document.getElementById("accuracy-order"),
   accuracyNote: document.getElementById("accuracy-note"),
   accuracyState: document.getElementById("accuracy-state"),
@@ -380,7 +372,6 @@ function applyIndexResult(result, options = {}) {
   if (updateUrl) {
     updateQueryParam(state.indexPath);
   }
-  elements.indexInput.value = state.indexPath;
   setIndexMeta(state.indexPath);
 }
 
@@ -606,39 +597,6 @@ function clearAccuracyState() {
 
 function canRefreshIndex() {
   return Boolean(state.indexPath && state.sourceType === "fetch");
-}
-
-function updateRefreshControls() {
-  const canRefresh = canRefreshIndex();
-  elements.refreshButton.disabled = !canRefresh || state.indexRefreshing;
-  elements.autoRefresh.disabled = !canRefresh;
-  elements.refreshInterval.disabled = !canRefresh;
-
-  if (!canRefresh && state.refreshEnabled) {
-    state.refreshEnabled = false;
-    elements.autoRefresh.checked = false;
-    updateRefreshTimer();
-  }
-}
-
-function updateRefreshStatus() {
-  let message = "Idle";
-  let className = "muted refresh-status";
-
-  if (!canRefreshIndex()) {
-    message = "Load an HTTP index to enable refresh.";
-  } else if (state.indexRefreshing) {
-    message = "Refreshing...";
-    className += " loading";
-  } else if (state.refreshError) {
-    message = `Refresh failed: ${state.refreshError}`;
-    className += " error";
-  } else if (state.refreshEnabled) {
-    message = `Auto every ${formatInterval(state.refreshIntervalMs)}`;
-  }
-
-  elements.refreshStatus.textContent = message;
-  elements.refreshStatus.className = className;
 }
 
 function updateRefreshTimer() {
@@ -1333,69 +1291,10 @@ async function loadIndexFromFetch(path, updateUrl) {
         loadSummary(run);
       }
     }
-    updateRefreshControls();
-    updateRefreshStatus();
     updateRefreshTimer();
     if (state.indexData) {
       prefetchSummaries(getRuns().filter((run) => run.status === "running"));
     }
-  }
-}
-
-async function loadLegacyFile(file) {
-  state.indexLoading = true;
-  state.indexError = null;
-  state.indexData = null;
-  state.summaryCache.clear();
-  state.selectedRunId = null;
-  state.refreshError = null;
-  renderRunList();
-  renderDetail();
-
-  try {
-    const data = JSON.parse(await file.text());
-    if (!Array.isArray(data)) {
-      throw new Error("Expected summary.json array.");
-    }
-
-    const legacy = buildLegacyIndex(data, {
-      summaryPath: file.name,
-      summaryUrl: null
-    });
-    state.indexData = legacy.indexData;
-    state.sourceType = "file";
-    state.summaryInline = true;
-    state.indexPath = file.name;
-    state.indexUrl = null;
-    state.lastRefresh = new Date().toISOString();
-    legacy.summaries.forEach((entry) =>
-      state.summaryCache.set(entry.run_id, entry)
-    );
-    setIndexMeta(file.name);
-    updateQueryParam("");
-    elements.indexInput.value = "";
-  } catch (error) {
-    state.indexError = error.message || "Unable to load summary.json file.";
-    state.sourceType = null;
-    state.summaryInline = false;
-    state.indexPath = null;
-    state.indexUrl = null;
-    state.lastRefresh = null;
-    setIndexMeta(null);
-  } finally {
-    state.indexLoading = false;
-    renderFilters();
-    syncSelection();
-    renderRunList();
-    if (state.selectedRunId) {
-      const run = getFilteredRuns().find((item) => item.run_id === state.selectedRunId);
-      if (run) {
-        loadSummary(run);
-      }
-    }
-    updateRefreshControls();
-    updateRefreshStatus();
-    updateRefreshTimer();
   }
 }
 
@@ -1427,8 +1326,6 @@ async function refreshIndex() {
 
   state.indexRefreshing = true;
   state.refreshError = null;
-  updateRefreshControls();
-  updateRefreshStatus();
 
   try {
     const result = await fetchIndexData(state.indexPath);
@@ -1456,8 +1353,6 @@ async function refreshIndex() {
   } finally {
     state.indexRefreshing = false;
     setIndexMeta(state.indexPath);
-    updateRefreshControls();
-    updateRefreshStatus();
   }
 }
 
@@ -1476,44 +1371,6 @@ function attachEventHandlers() {
     renderDetail();
   });
 
-  elements.loadIndex.addEventListener("click", () => {
-    const path = elements.indexInput.value.trim();
-    if (path.length === 0) {
-      return;
-    }
-    loadIndexFromFetch(path, true);
-  });
-
-  elements.loadLegacy.addEventListener("click", () => {
-    elements.legacyFile.click();
-  });
-
-  elements.legacyFile.addEventListener("change", async (event) => {
-    const file = event.target.files[0];
-    if (!file) {
-      return;
-    }
-    await loadLegacyFile(file);
-    event.target.value = "";
-  });
-
-  elements.refreshButton.addEventListener("click", () => {
-    refreshIndex();
-  });
-
-  elements.autoRefresh.addEventListener("change", (event) => {
-    state.refreshEnabled = event.target.checked;
-    updateRefreshTimer();
-    updateRefreshStatus();
-  });
-
-  elements.refreshInterval.addEventListener("change", (event) => {
-    const value = Number(event.target.value);
-    state.refreshIntervalMs = Number.isNaN(value) ? 30000 : value;
-    updateRefreshTimer();
-    updateRefreshStatus();
-  });
-
   elements.accuracyOrder.addEventListener("change", (event) => {
     state.accuracyOrder = event.target.value;
     renderAccuracyPlot();
@@ -1522,24 +1379,15 @@ function attachEventHandlers() {
 
 function init() {
   attachEventHandlers();
-  state.refreshIntervalMs = Number(elements.refreshInterval.value) || 30000;
+  state.refreshIntervalMs = 30000;
   state.accuracyOrder = elements.accuracyOrder.value || "index";
-  elements.autoRefresh.checked = state.refreshEnabled;
-  updateRefreshControls();
-  updateRefreshStatus();
   renderFilters();
   renderRunList();
   renderDetail();
 
   const queryIndex = new URLSearchParams(window.location.search).get("index");
-  if (queryIndex) {
-    elements.indexInput.value = queryIndex;
-    loadIndexFromFetch(queryIndex, false);
-    return;
-  }
-
-  elements.indexInput.value = DEFAULT_INDEX_PATH;
-  loadIndexFromFetch(DEFAULT_INDEX_PATH, false);
+  const initialIndex = queryIndex || DEFAULT_INDEX_PATH;
+  loadIndexFromFetch(initialIndex, false);
 }
 
 init();
