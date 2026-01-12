@@ -240,9 +240,9 @@ button {
   gap: 24px;
 }
 
-.best-grid {
+.best-run {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
