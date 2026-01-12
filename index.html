@@ -37,82 +37,84 @@
         </div>
       </header>
 
-      <section class="panel controls">
-        <div class="control-block">
-          <label for="index-input">Index URL</label>
-          <div class="index-input">
-            <input
-              id="index-input"
-              type="text"
-              placeholder="/experiments/experiment-index.json"
-            />
-            <button
-              id="load-index"
-              class="action-button"
-              title="Load an experiment-index.json (or legacy summary.json) from a URL."
-              aria-label="Load index URL"
-            >
-              Load
-            </button>
+      <section class="panel-row">
+        <section class="panel best">
+          <div class="panel-header">
+            <h2>Best Run</h2>
+            <span class="pill" id="best-count">0 runs</span>
           </div>
-        </div>
+          <div id="best-run" class="best-run"></div>
+        </section>
 
-        <div class="control-block">
-          <label>Legacy summary.json</label>
-          <button
-            id="load-legacy"
-            class="action-button secondary"
-            title="Load a legacy summary.json file from disk."
-            aria-label="Load legacy summary.json"
-          >
-            Load summary.json
-          </button>
-        </div>
+        <section class="panel controls compact">
+          <div class="control-block">
+            <label for="index-input">Index URL</label>
+            <div class="index-input">
+              <input
+                id="index-input"
+                type="text"
+                placeholder="/experiments/experiment-index.json"
+              />
+              <button
+                id="load-index"
+                class="action-button"
+                title="Load an experiment-index.json (or legacy summary.json) from a URL."
+                aria-label="Load index URL"
+              >
+                Load
+              </button>
+            </div>
+          </div>
 
-        <div class="control-block">
-          <label>Refresh</label>
-          <div class="refresh-row">
+          <div class="control-block">
+            <label>Legacy summary.json</label>
             <button
-              id="refresh-index"
+              id="load-legacy"
               class="action-button secondary"
-              title="Refresh the experiment index from the current URL."
-              aria-label="Refresh experiment index"
+              title="Load a legacy summary.json file from disk."
+              aria-label="Load legacy summary.json"
             >
-              Refresh now
+              Load summary.json
             </button>
-            <label class="toggle">
-              <input id="auto-refresh" type="checkbox" />
-              <span>Auto</span>
-            </label>
           </div>
-          <div class="refresh-row">
-            <select id="refresh-interval" aria-label="Auto refresh interval">
-              <option value="15000">15s</option>
-              <option value="30000" selected>30s</option>
-              <option value="60000">60s</option>
-              <option value="120000">120s</option>
-              <option value="300000">300s</option>
-            </select>
-            <span id="refresh-status" class="muted refresh-status" aria-live="polite">Idle</span>
+
+          <div class="control-block">
+            <label>Refresh</label>
+            <div class="refresh-row">
+              <button
+                id="refresh-index"
+                class="action-button secondary"
+                title="Refresh the experiment index from the current URL."
+                aria-label="Refresh experiment index"
+              >
+                Refresh now
+              </button>
+              <label class="toggle">
+                <input id="auto-refresh" type="checkbox" />
+                <span>Auto</span>
+              </label>
+            </div>
+            <div class="refresh-row">
+              <select id="refresh-interval" aria-label="Auto refresh interval">
+                <option value="15000">15s</option>
+                <option value="30000" selected>30s</option>
+                <option value="60000">60s</option>
+                <option value="120000">120s</option>
+                <option value="300000">300s</option>
+              </select>
+              <span id="refresh-status" class="muted refresh-status" aria-live="polite">Idle</span>
+            </div>
           </div>
-        </div>
 
-        <div>
-          <label for="status-filter">Status</label>
-          <select id="status-filter"></select>
-        </div>
-        <div>
-          <label for="category-filter">Group</label>
-          <select id="category-filter"></select>
-        </div>
-      </section>
-
-      <section class="panel best">
-        <div class="panel-header">
-          <h2>Best Run</h2>
-          <span class="pill" id="best-count">0 runs</span>
-        </div>
-        <div id="best-run" class="best-run"></div>
+          <div>
+            <label for="status-filter">Status</label>
+            <select id="status-filter"></select>
+          </div>
+          <div>
+            <label for="category-filter">Group</label>
+            <select id="category-filter"></select>
+          </div>
+        </section>
       </section>
 
       <section class="panel visual">

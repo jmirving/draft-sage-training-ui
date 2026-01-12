@@ -137,11 +137,47 @@ button {
   padding: 20px 24px;
 }
 
+.panel-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: 24px;
+  align-items: start;
+}
+
 .controls {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
   align-items: end;
+}
+
+.controls.compact {
+  padding: 16px 20px;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: start;
+  max-width: 320px;
+  justify-self: end;
+}
+
+.controls.compact .control-block > label,
+.controls.compact > div > label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.controls.compact select,
+.controls.compact .index-input input {
+  padding: 8px 10px;
+  font-size: 0.9rem;
+}
+
+.controls.compact .action-button {
+  padding: 8px 12px;
 }
 
 .control-block label {
@@ -567,6 +603,15 @@ button {
 @media (max-width: 960px) {
   .app-header {
     flex-direction: column;
+  }
+
+  .panel-row {
+    grid-template-columns: 1fr;
+  }
+
+  .controls.compact {
+    max-width: none;
+    justify-self: stretch;
   }
 
   .grid {
