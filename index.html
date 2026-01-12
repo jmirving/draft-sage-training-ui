@@ -115,6 +115,23 @@
         <div id="best-grid" class="best-grid"></div>
       </section>
 
+      <section class="panel visual">
+        <div class="panel-header">
+          <h2>Accuracy plot</h2>
+          <div class="plot-controls">
+            <label class="plot-label" for="accuracy-order">Order</label>
+            <select id="accuracy-order">
+              <option value="index" selected>Index order</option>
+              <option value="accuracy">Accuracy</option>
+              <option value="run_id">Run ID time</option>
+            </select>
+            <span id="accuracy-note" class="muted">—</span>
+          </div>
+        </div>
+        <div id="accuracy-state" class="state">Load an index to get started.</div>
+        <div id="accuracy-plot" class="accuracy-plot"></div>
+      </section>
+
       <main class="grid">
         <section class="panel list">
           <div class="panel-header">

@@ -27,7 +27,8 @@ const state = {
   refreshTimer: null,
   lastRefresh: null,
   refreshError: null,
-  indexRefreshing: false
+  indexRefreshing: false,
+  accuracyOrder: "index"
 };
 
 const elements = {
@@ -51,7 +52,11 @@ const elements = {
   refreshButton: document.getElementById("refresh-index"),
   autoRefresh: document.getElementById("auto-refresh"),
   refreshInterval: document.getElementById("refresh-interval"),
-  refreshStatus: document.getElementById("refresh-status")
+  refreshStatus: document.getElementById("refresh-status"),
+  accuracyOrder: document.getElementById("accuracy-order"),
+  accuracyNote: document.getElementById("accuracy-note"),
+  accuracyState: document.getElementById("accuracy-state"),
+  accuracyPlot: document.getElementById("accuracy-plot")
 };
 
 function formatDate(value) {
@@ -361,6 +366,48 @@ function compareRuns(a, b) {
   return 0;
 }
 
+function getRunSortTimestamp(run, fallbackIndex) {
+  const parsed = parseRunIdTimestamp(run?.run_id);
+  if (parsed) {
+    const time = new Date(parsed).getTime();
+    if (!Number.isNaN(time)) {
+      return time;
+    }
+  }
+  return fallbackIndex;
+}
+
+function sortRunsForPlot(runs) {
+  const decorated = runs.map((run, index) => ({ run, index }));
+
+  if (state.accuracyOrder === "accuracy") {
+    return decorated.sort((a, b) => {
+      const aAcc = getRunAccuracy(a.run);
+      const bAcc = getRunAccuracy(b.run);
+      if (aAcc !== null && bAcc !== null) {
+        return aAcc - bAcc;
+      }
+      if (aAcc !== null) {
+        return -1;
+      }
+      if (bAcc !== null) {
+        return 1;
+      }
+      return a.index - b.index;
+    });
+  }
+
+  if (state.accuracyOrder === "run_id") {
+    return decorated.sort(
+      (a, b) =>
+        getRunSortTimestamp(a.run, a.index) -
+        getRunSortTimestamp(b.run, b.index)
+    );
+  }
+
+  return decorated;
+}
+
 function getBestRunsByCategory(runs) {
   const bestByCategory = new Map();
 
@@ -472,6 +519,16 @@ function clearDetailState() {
   elements.detailState.style.display = "none";
 }
 
+function setAccuracyState(message, type) {
+  elements.accuracyState.textContent = message;
+  elements.accuracyState.className = `state${type ? ` ${type}` : ""}`;
+  elements.accuracyState.style.display = "block";
+}
+
+function clearAccuracyState() {
+  elements.accuracyState.style.display = "none";
+}
+
 function canRefreshIndex() {
   return Boolean(state.indexPath && state.sourceType === "fetch");
 }
@@ -554,22 +611,26 @@ function renderRunList() {
 
   if (state.indexLoading) {
     setListState("Loading experiment index…");
+    renderAccuracyPlot();
     return;
   }
 
   if (state.indexError) {
     setListState(`Unable to load index: ${state.indexError}`, "error");
+    renderAccuracyPlot();
     return;
   }
 
   if (!state.indexData) {
     setListState("Load an index to get started.");
+    renderAccuracyPlot();
     return;
   }
 
   if (runs.length === 0) {
     setListState("No runs match the current filters.", "empty");
     renderBestGrid();
+    renderAccuracyPlot();
     return;
   }
 
@@ -630,6 +691,7 @@ function renderRunList() {
   });
 
   renderBestGrid();
+  renderAccuracyPlot();
 }
 
 function createMetaField(label, value) {
@@ -700,6 +762,195 @@ function renderBestGrid() {
 
     elements.bestGrid.appendChild(card);
   });
+}
+
+function getAccuracyOrderLabel() {
+  if (state.accuracyOrder === "accuracy") {
+    return "accuracy (low to high)";
+  }
+  if (state.accuracyOrder === "run_id") {
+    return "run id time";
+  }
+  return "index order";
+}
+
+function createSvgElement(tag, attributes = {}) {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  Object.entries(attributes).forEach(([key, value]) => {
+    element.setAttribute(key, value);
+  });
+  return element;
+}
+
+function renderAccuracyPlot() {
+  elements.accuracyPlot.innerHTML = "";
+  elements.accuracyNote.textContent = "—";
+
+  if (state.indexLoading) {
+    setAccuracyState("Loading experiment index...");
+    return;
+  }
+
+  if (state.indexError) {
+    setAccuracyState(`Unable to load index: ${state.indexError}`, "error");
+    return;
+  }
+
+  if (!state.indexData) {
+    setAccuracyState("Load an index to get started.");
+    return;
+  }
+
+  const runs = getFilteredRuns();
+  if (runs.length === 0) {
+    setAccuracyState("No runs match the current filters.", "empty");
+    return;
+  }
+
+  const orderedRuns = sortRunsForPlot(runs);
+  const totalRuns = orderedRuns.length;
+  const points = orderedRuns.map((entry, orderIndex) => ({
+    run: entry.run,
+    orderIndex,
+    accuracy: getRunAccuracy(entry.run)
+  }));
+  const pointsWithAccuracy = points.filter(
+    (point) => point.accuracy !== null
+  );
+
+  elements.accuracyNote.textContent = `${pointsWithAccuracy.length} of ${totalRuns} runs with accuracy | Order: ${getAccuracyOrderLabel()}`;
+
+  if (pointsWithAccuracy.length === 0) {
+    setAccuracyState("No runs with accuracy yet.", "empty");
+    return;
+  }
+
+  clearAccuracyState();
+
+  const width = 720;
+  const height = 260;
+  const padding = { top: 20, right: 24, bottom: 32, left: 56 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+
+  let minAcc = Math.min(...pointsWithAccuracy.map((point) => point.accuracy));
+  let maxAcc = Math.max(...pointsWithAccuracy.map((point) => point.accuracy));
+  let range = maxAcc - minAcc;
+  if (range === 0) {
+    minAcc -= 0.005;
+    maxAcc += 0.005;
+    range = maxAcc - minAcc;
+  }
+
+  const svg = createSvgElement("svg", {
+    class: "accuracy-svg",
+    viewBox: `0 0 ${width} ${height}`,
+    role: "img",
+    "aria-label": "Accuracy plot"
+  });
+
+  const gridLines = 3;
+  for (let i = 0; i <= gridLines; i += 1) {
+    const y = padding.top + (plotHeight * i) / gridLines;
+    const grid = createSvgElement("line", {
+      class: "plot-grid",
+      x1: padding.left,
+      x2: width - padding.right,
+      y1: y,
+      y2: y
+    });
+    svg.appendChild(grid);
+  }
+
+  svg.appendChild(
+    createSvgElement("line", {
+      class: "plot-axis",
+      x1: padding.left,
+      x2: padding.left,
+      y1: padding.top,
+      y2: height - padding.bottom
+    })
+  );
+  svg.appendChild(
+    createSvgElement("line", {
+      class: "plot-axis",
+      x1: padding.left,
+      x2: width - padding.right,
+      y1: height - padding.bottom,
+      y2: height - padding.bottom
+    })
+  );
+
+  const maxLabel = createSvgElement("text", {
+    class: "plot-label-text",
+    x: 8,
+    y: padding.top + 4
+  });
+  maxLabel.textContent = formatNumber(maxAcc, 4);
+  svg.appendChild(maxLabel);
+
+  const minLabel = createSvgElement("text", {
+    class: "plot-label-text",
+    x: 8,
+    y: height - padding.bottom
+  });
+  minLabel.textContent = formatNumber(minAcc, 4);
+  svg.appendChild(minLabel);
+
+  const orderLabel = createSvgElement("text", {
+    class: "plot-label-text",
+    x: width - padding.right - 120,
+    y: height - 8
+  });
+  orderLabel.textContent = "Order";
+  svg.appendChild(orderLabel);
+
+  const orderedPoints = pointsWithAccuracy.slice().sort((a, b) => {
+    return a.orderIndex - b.orderIndex;
+  });
+
+  if (orderedPoints.length > 1) {
+    const polyline = createSvgElement("polyline", {
+      class: "plot-line",
+      points: orderedPoints
+        .map((point) => {
+          const x =
+            padding.left +
+            (point.orderIndex / Math.max(1, totalRuns - 1)) * plotWidth;
+          const y =
+            padding.top +
+            (1 - (point.accuracy - minAcc) / range) * plotHeight;
+          return `${x},${y}`;
+        })
+        .join(" ")
+    });
+    svg.appendChild(polyline);
+  }
+
+  pointsWithAccuracy.forEach((point) => {
+    const x =
+      padding.left +
+      (point.orderIndex / Math.max(1, totalRuns - 1)) * plotWidth;
+    const y =
+      padding.top +
+      (1 - (point.accuracy - minAcc) / range) * plotHeight;
+
+    const circle = createSvgElement("circle", {
+      class: `plot-point status-${point.run.status || "planned"}`,
+      cx: x,
+      cy: y,
+      r: 4
+    });
+
+    const title = createSvgElement("title");
+    const name = point.run.display_name || point.run.run_id;
+    const status = STATUS_LABELS[point.run.status] || point.run.status || "planned";
+    title.textContent = `${name}\n${point.run.run_id}\nAccuracy: ${formatNumber(point.accuracy)}\nStatus: ${status}`;
+    circle.appendChild(title);
+    svg.appendChild(circle);
+  });
+
+  elements.accuracyPlot.appendChild(svg);
 }
 
 function focusOnRun(run) {
@@ -1178,17 +1429,23 @@ function attachEventHandlers() {
     updateRefreshTimer();
     updateRefreshStatus();
   });
+
+  elements.accuracyOrder.addEventListener("change", (event) => {
+    state.accuracyOrder = event.target.value;
+    renderAccuracyPlot();
+  });
 }
 
 function init() {
   attachEventHandlers();
-  renderFilters();
-  renderRunList();
-  renderDetail();
   state.refreshIntervalMs = Number(elements.refreshInterval.value) || 30000;
+  state.accuracyOrder = elements.accuracyOrder.value || "index";
   elements.autoRefresh.checked = state.refreshEnabled;
   updateRefreshControls();
   updateRefreshStatus();
+  renderFilters();
+  renderRunList();
+  renderDetail();
 
   const queryIndex = new URLSearchParams(window.location.search).get("index");
   if (queryIndex) {

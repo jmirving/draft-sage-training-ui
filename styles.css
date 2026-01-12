@@ -246,6 +246,81 @@ button {
   gap: 16px;
 }
 
+.visual .panel-header {
+  flex-wrap: wrap;
+}
+
+.plot-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.plot-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+.accuracy-plot {
+  width: 100%;
+}
+
+.accuracy-svg {
+  width: 100%;
+  height: 260px;
+  display: block;
+}
+
+.plot-axis {
+  stroke: rgba(28, 28, 28, 0.2);
+  stroke-width: 1.2;
+}
+
+.plot-grid {
+  stroke: rgba(28, 28, 28, 0.08);
+  stroke-width: 1;
+}
+
+.plot-line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.plot-point {
+  fill: var(--accent-strong);
+  stroke: white;
+  stroke-width: 1.5;
+}
+
+.plot-point.status-completed {
+  fill: var(--ok);
+}
+
+.plot-point.status-running {
+  fill: var(--accent);
+}
+
+.plot-point.status-failed {
+  fill: var(--bad);
+}
+
+.plot-point.status-planned {
+  fill: var(--paused);
+}
+
+.plot-point.status-canceled {
+  fill: var(--muted);
+}
+
+.plot-label-text {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
 .best-card {
   border: 1px solid var(--card-border);
   border-radius: 16px;
