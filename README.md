@@ -27,7 +27,7 @@ Open `index.html` in your browser. Load data by either selecting a legacy
 When the UI is opened without `?index=`, it auto-loads the combined index at:
 
 ```
-/.tmp/training-clean-2025-all/experiment-index.json
+/.tmp/training-clean-2025-grouped-index/experiment-index.json
 ```
 
 After new training runs, rebuild the combined index so the default stays current.

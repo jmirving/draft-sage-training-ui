@@ -1,5 +1,5 @@
 const STATUS_ORDER = ["planned", "running", "completed", "failed", "canceled"];
-const DEFAULT_INDEX_PATH = "/.tmp/training-clean-2025-all/experiment-index.json";
+const DEFAULT_INDEX_PATH = "/.tmp/training-clean-2025-grouped-index/experiment-index.json";
 const STATUS_LABELS = {
   planned: "Planned",
   running: "Running",
