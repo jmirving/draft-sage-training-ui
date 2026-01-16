@@ -1,6 +1,9 @@
 const STATUS_ORDER = ["planned", "running", "completed", "failed", "canceled"];
-const DEFAULT_INDEX_PATH =
-  "/.tmp/training-clean-2025-seriesid-index/experiment-index.json";
+const DEFAULT_INDEX_PATHS = [
+  "/.tmp/training-clean-2025-seriesid-index/experiment-index.json",
+  "/.tmp/training-clean-2025-seriesid-baseline-elig/experiment-index.json",
+  "/.tmp/training-clean-2025-weights-matrix-seriesid-elig/experiment-index.json"
+];
 const STATUS_LABELS = {
   planned: "Planned",
   running: "Running",
@@ -10,9 +13,9 @@ const STATUS_LABELS = {
 };
 const GROUP_LABELS = {
   baseline: "Baseline",
-  "pb-role-weights-matrix": "PB + role weights matrix",
+  "pb-role-weights-matrix": "Pick/Ban priors + role priors",
   "role-priors": "Role priors",
-  "priors-role-priors": "Champion + role priors",
+  "priors-role-priors": "Pick/Ban priors + role priors",
   "league-team-priors": "League/team priors",
   "timeaware-priors": "Time-aware priors"
 };
@@ -39,7 +42,8 @@ const state = {
   lastRefresh: null,
   refreshError: null,
   indexRefreshing: false,
-  groupLabels: new Map()
+  groupLabels: new Map(),
+  indexSources: []
 };
 
 const elements = {
@@ -116,6 +120,48 @@ function withCacheBust(url) {
   const busted = new URL(url);
   busted.searchParams.set("_", Date.now().toString());
   return busted.toString();
+}
+
+function mergeMetrics(existing, incoming) {
+  const merged = { ...(existing || {}) };
+  Object.entries(incoming || {}).forEach(([key, value]) => {
+    if (value !== null && value !== undefined) {
+      merged[key] = value;
+    }
+  });
+  return merged;
+}
+
+function mergeDataset(existing, incoming) {
+  const merged = { ...(existing || {}) };
+  Object.entries(incoming || {}).forEach(([key, value]) => {
+    if (value !== null && value !== undefined) {
+      merged[key] = value;
+    }
+  });
+  return merged;
+}
+
+function mergeRunEntries(existing, incoming) {
+  if (!existing) {
+    return incoming;
+  }
+  const merged = { ...existing, ...incoming };
+  merged.metrics = mergeMetrics(existing.metrics, incoming.metrics);
+  merged.dataset = mergeDataset(existing.dataset, incoming.dataset);
+  if (!incoming.group_id && existing.group_id) {
+    merged.group_id = existing.group_id;
+  }
+  if (!incoming.variant_label && existing.variant_label) {
+    merged.variant_label = existing.variant_label;
+  }
+  if (!incoming.summary_path && existing.summary_path) {
+    merged.summary_path = existing.summary_path;
+  }
+  if (!incoming.summary_base_url && existing.summary_base_url) {
+    merged.summary_base_url = existing.summary_base_url;
+  }
+  return merged;
 }
 
 function parseRunIdTimestamp(runId) {
@@ -862,7 +908,12 @@ function updateMetricAvailability(runs) {
 }
 
 function setIndexMeta(indexPath) {
-  elements.indexPath.textContent = indexPath || "—";
+  const sources = state.indexSources || [];
+  if (sources.length > 1) {
+    elements.indexPath.textContent = `Auto (${sources.length} sources)`;
+  } else {
+    elements.indexPath.textContent = indexPath || sources[0] || "—";
+  }
   elements.indexUpdated.textContent = formatDate(state.indexData?.generated_at);
   elements.indexRefreshed.textContent = formatDate(state.lastRefresh);
 }
@@ -967,6 +1018,92 @@ async function fetchIndexData(path) {
   };
 }
 
+function mergeIndexResults(results) {
+  const runsById = new Map();
+  const summaries = [];
+  let baselineInfo = {
+    true_baseline_run_id: null,
+    baseline_to_beat_run_id: null,
+    baseline_updated_at: null
+  };
+  let baselineTimestamp = 0;
+
+  results.forEach((result) => {
+    const data = result.indexData || {};
+    const runs = Array.isArray(data.runs) ? data.runs : [];
+    const indexUrl = result.indexUrl;
+    const summaryInline = result.summaryInline;
+
+    runs.forEach((run) => {
+      if (!run?.run_id) {
+        return;
+      }
+      const enriched = { ...run };
+      if (indexUrl) {
+        enriched.summary_base_url = indexUrl;
+      }
+      const existing = runsById.get(run.run_id);
+      runsById.set(run.run_id, mergeRunEntries(existing, enriched));
+    });
+
+    if (Array.isArray(result.summaries)) {
+      summaries.push(...result.summaries);
+    }
+
+    const candidateUpdated = data.baseline_updated_at;
+    const candidateTimestamp = candidateUpdated
+      ? new Date(candidateUpdated).getTime()
+      : 0;
+    const hasBaselinePointers =
+      data.true_baseline_run_id || data.baseline_to_beat_run_id;
+    if (hasBaselinePointers && candidateTimestamp >= baselineTimestamp) {
+      baselineTimestamp = candidateTimestamp;
+      baselineInfo = {
+        true_baseline_run_id: data.true_baseline_run_id || null,
+        baseline_to_beat_run_id: data.baseline_to_beat_run_id || null,
+        baseline_updated_at: data.baseline_updated_at || null
+      };
+    }
+  });
+
+  const combined = {
+    schema_version: "1.0",
+    generated_at: new Date().toISOString(),
+    runs: Array.from(runsById.values()).sort((a, b) =>
+      (a.run_id || "").localeCompare(b.run_id || "")
+    )
+  };
+  if (baselineInfo.true_baseline_run_id) {
+    combined.true_baseline_run_id = baselineInfo.true_baseline_run_id;
+  }
+  if (baselineInfo.baseline_to_beat_run_id) {
+    combined.baseline_to_beat_run_id = baselineInfo.baseline_to_beat_run_id;
+  }
+  if (baselineInfo.baseline_updated_at) {
+    combined.baseline_updated_at = baselineInfo.baseline_updated_at;
+  }
+
+  return {
+    indexData: combined,
+    summaries,
+    summaryInline: summaries.length > 0,
+    indexPath: results[0]?.indexPath || null,
+    indexUrl: results[0]?.indexUrl || null,
+    indexSources: results.map((result) => result.indexPath).filter(Boolean)
+  };
+}
+
+async function fetchIndexSources(paths) {
+  const results = await Promise.allSettled(paths.map((path) => fetchIndexData(path)));
+  const successes = results
+    .filter((result) => result.status === "fulfilled")
+    .map((result) => result.value);
+  if (successes.length === 0) {
+    throw new Error("Unable to load any experiment indexes.");
+  }
+  return mergeIndexResults(successes);
+}
+
 function buildLegacyIndex(summaryRows, summaryLocation) {
   const generatedAt = new Date().toISOString();
   const runs = [];
@@ -1058,6 +1195,7 @@ function applyIndexResult(result, options = {}) {
   state.summaryInline = result.summaryInline;
   state.indexPath = result.indexPath;
   state.indexUrl = result.indexUrl;
+  state.indexSources = result.indexSources || [result.indexPath].filter(Boolean);
   state.summaryCache.clear();
   if (Array.isArray(result.summaries)) {
     result.summaries.forEach((entry) => state.summaryCache.set(entry.run_id, entry));
@@ -1113,7 +1251,8 @@ async function fetchSummary(run, options = {}) {
   }
 
   try {
-    const summaryUrl = new URL(run.summary_path, state.indexUrl).toString();
+    const summaryBaseUrl = run.summary_base_url || state.indexUrl;
+    const summaryUrl = new URL(run.summary_path, summaryBaseUrl).toString();
     const response = await fetch(withCacheBust(summaryUrl), {
       cache: "no-store"
     });
@@ -1142,16 +1281,18 @@ async function loadSummary(run) {
 }
 
 async function loadIndexFromFetch(path, updateUrl) {
+  const paths = Array.isArray(path) ? path : [path];
   state.indexLoading = true;
   state.indexError = null;
   state.indexData = null;
   state.summaryCache.clear();
   state.selectedRunId = null;
   state.refreshError = null;
+  state.indexSources = paths;
   renderAll();
 
   try {
-    const result = await fetchIndexData(path);
+    const result = await fetchIndexSources(paths);
     state.lastRefresh = new Date().toISOString();
     applyIndexResult(result, {
       preserveSelection: false,
@@ -1165,6 +1306,7 @@ async function loadIndexFromFetch(path, updateUrl) {
     state.indexPath = null;
     state.indexUrl = null;
     state.lastRefresh = null;
+    state.indexSources = [];
     setIndexMeta(null);
   } finally {
     state.indexLoading = false;
@@ -1206,7 +1348,7 @@ async function prefetchSummaries(runs) {
 }
 
 function canRefreshIndex() {
-  return Boolean(state.indexPath && state.sourceType === "fetch");
+  return Boolean(state.indexSources.length > 0 && state.sourceType === "fetch");
 }
 
 function updateRefreshTimer() {
@@ -1233,7 +1375,7 @@ async function refreshIndex() {
   state.refreshError = null;
 
   try {
-    const result = await fetchIndexData(state.indexPath);
+    const result = await fetchIndexSources(state.indexSources);
     state.lastRefresh = new Date().toISOString();
     applyIndexResult(result, {
       preserveSelection: true,
@@ -1287,9 +1429,7 @@ function init() {
   renderFilters();
   renderAll();
 
-  const queryIndex = new URLSearchParams(window.location.search).get("index");
-  const initialIndex = queryIndex || DEFAULT_INDEX_PATH;
-  loadIndexFromFetch(initialIndex, false);
+  loadIndexFromFetch(DEFAULT_INDEX_PATHS, false);
 }
 
 init();

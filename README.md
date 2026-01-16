@@ -20,8 +20,8 @@ Visualization UI for DraftSage training experiments.
 - Read-only dashboards and experiment catalog views
 
 ## Quick start (no build step)
-Open `index.html` in your browser. Load data by either selecting a legacy
-`summary.json` file or by entering an index URL served over HTTP.
+Open `index.html` in your browser. It auto-loads the configured experiment
+indexes and merges them into one view.
 
 ## Quick launch (recommended)
 Serve the repo root and print the UI URL in one command:
@@ -30,45 +30,15 @@ Serve the repo root and print the UI URL in one command:
 ./draft-sage-training-ui/scripts/launch_ui.sh
 ```
 
-## Default index (auto-load)
-When the UI is opened without `?index=`, it auto-loads the combined index at:
-
-```
-/.tmp/training-clean-2025-seriesid-index/experiment-index.json
-```
-
-After new training runs, rebuild the combined index so the default stays current.
-Use `draft-sage-training/scripts/build_combined_index.py` to regenerate the
-combined file.
-
-## Configure the experiment index
-The UI reads the index via a query param when served over HTTP:
-
-```
-http://localhost:8000/?index=/experiments/experiment-index.json
-```
-
-The `summary_path` values in the index are resolved relative to the index file.
+## Default sources (auto-load)
+The UI loads a fixed list of experiment indexes defined in
+`draft-sage-training-ui/app.js` under `DEFAULT_INDEX_PATHS`. Update that list
+whenever a new output directory should be part of the UI.
 
 ## Legacy outputs (summary.json)
 Older runs may only provide a root-level `summary.json` array (for example,
 `/home/jirving/projects/lol/.tmp/training-clean-2025-ep20/summary.json`).
-The UI can load this directly:
-- Click **Load summary.json** and select the file, or
-- Serve the file over HTTP and use `?index=/path/to/summary.json`.
-
-## Load local experiment outputs (HTTP)
-If you prefer the query param path, serve the repo from a simple local server
-so the browser can fetch JSON:
-
-```bash
-python -m http.server 8000
-```
-
-Then open (adjust the path as needed):
-```
-http://localhost:8000/?index=/experiments/experiment-index.json
-```
+Serve it over HTTP and add the path to `DEFAULT_INDEX_PATHS`.
 
 ## WSL-friendly serving (single command)
 Serve the repo root so the UI and outputs share the same origin:
@@ -80,7 +50,7 @@ python -m http.server 8000
 
 Then open:
 ```
-http://localhost:8000/draft-sage-training-ui/index.html?index=/.tmp/training-clean-2025-ep20/summary.json
+http://localhost:8000/draft-sage-training-ui/index.html
 ```
 
 ## Mock data
