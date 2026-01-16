@@ -1,12 +1,17 @@
 {
   "schema_version": "1.0",
   "generated_at": "2026-01-12T09:02:00Z",
+  "true_baseline_run_id": "2026-01-11T18-00-12Z_baseline_2025_clean",
+  "baseline_to_beat_run_id": "2026-01-12T08-42-55Z_weight_priors_roll",
+  "baseline_updated_at": "2026-01-12T09:02:00Z",
   "runs": [
     {
       "run_id": "2026-01-11T18-00-12Z_baseline_2025_clean",
       "display_name": "Baseline 2025 clean",
       "status": "completed",
       "category": "baseline",
+      "group_id": "baseline",
+      "variant_label": "No priors",
       "dataset": {
         "source": "lol-pro-data-processor",
         "window": {
@@ -30,6 +35,8 @@
       "display_name": "Weight priors + optional inputs",
       "status": "running",
       "category": "priors",
+      "group_id": "priors",
+      "variant_label": "Weight priors roll",
       "dataset": {
         "source": "lol-pro-data-processor",
         "window": {

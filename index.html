@@ -13,12 +13,12 @@
 
     <div class="app-shell">
       <header class="app-header">
-        <div>
+        <div class="header-title">
           <p class="eyebrow">DraftSage</p>
-          <h1>Training Experiment Journal</h1>
+          <h1>Training Decision Console</h1>
           <p class="subtitle">
-            Follow experiment runs, accuracy levers, and data windows with a
-            single index file.
+            Track live runs, compare experiments, and decide the next move with
+            clarity.
           </p>
         </div>
         <div class="header-meta">
@@ -37,53 +37,77 @@
         </div>
       </header>
 
-      <section class="panel-row">
-        <section class="panel best">
+      <section class="decision-row">
+        <section class="panel decision-card">
           <div class="panel-header">
-            <h2>Best Run</h2>
-            <span class="pill" id="best-count">0 runs</span>
+            <h2>Running now</h2>
+            <span id="running-count" class="pill">0</span>
           </div>
-          <div id="best-run" class="best-run"></div>
+          <div id="running-now" class="decision-body"></div>
         </section>
-
-        <section class="panel controls compact">
-          <div>
-            <label for="status-filter">Status</label>
-            <select id="status-filter"></select>
+        <section class="panel decision-card">
+          <div class="panel-header">
+            <h2>True baseline</h2>
+            <span class="pill muted-pill">Pinned</span>
           </div>
-          <div>
-            <label for="category-filter">Group</label>
-            <select id="category-filter"></select>
+          <div id="true-baseline" class="decision-body"></div>
+        </section>
+        <section class="panel decision-card">
+          <div class="panel-header">
+            <h2>Baseline to beat</h2>
+            <span class="pill muted-pill">Target</span>
           </div>
+          <div id="baseline-to-beat" class="decision-body"></div>
+        </section>
+        <section class="panel decision-card">
+          <div class="panel-header">
+            <h2>Next decision</h2>
+            <span class="pill muted-pill">Cue</span>
+          </div>
+          <div id="next-decision" class="decision-body"></div>
         </section>
       </section>
 
-      <section class="panel visual">
-        <div class="panel-header">
-          <h2>Accuracy plot</h2>
-          <div class="plot-controls">
-            <label class="plot-label" for="accuracy-order">Order</label>
-            <select id="accuracy-order">
-              <option value="index" selected>Index order</option>
-              <option value="accuracy">Accuracy</option>
-              <option value="run_id">Run ID time</option>
-            </select>
-            <span id="accuracy-note" class="muted">—</span>
-          </div>
+      <section class="panel controls-bar">
+        <div class="control-block">
+          <label for="status-filter">Status</label>
+          <select id="status-filter"></select>
         </div>
-        <div id="accuracy-state" class="state">Load an index to get started.</div>
-        <div id="accuracy-plot" class="accuracy-plot"></div>
+        <div class="control-block">
+          <label for="group-filter">Group</label>
+          <select id="group-filter"></select>
+        </div>
+        <div class="control-block">
+          <label for="metric-filter">Metric</label>
+          <select id="metric-filter">
+            <option value="accuracy" selected>Accuracy</option>
+            <option value="top_k">Top-k accuracy</option>
+          </select>
+        </div>
       </section>
 
-      <main class="grid">
-        <section class="panel list">
+      <main class="analysis-grid">
+        <section class="panel comparison">
           <div class="panel-header">
-            <h2>Runs</h2>
-            <span id="run-count" class="pill">0 total</span>
+            <h2>Decision table</h2>
+            <span id="table-count" class="pill">0 groups</span>
           </div>
-
-          <div id="list-state" class="state">Load an index to get started.</div>
-          <div id="run-list" class="run-list"></div>
+          <div id="table-state" class="state">Load an index to get started.</div>
+          <div class="table-wrap">
+            <table id="comparison-table">
+              <thead>
+                <tr>
+                  <th>Group</th>
+                  <th>Best variant</th>
+                  <th>Metric</th>
+                  <th>Delta vs target</th>
+                  <th>Status</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody id="comparison-body"></tbody>
+            </table>
+          </div>
         </section>
 
         <section class="panel detail">
@@ -91,13 +115,21 @@
             <h2>Run detail</h2>
             <span id="detail-status" class="status-badge">—</span>
           </div>
-
           <div id="detail-state" class="state">
             Select a run to see its details.
           </div>
           <div id="detail-body" class="detail-body"></div>
         </section>
       </main>
+
+      <section class="panel ledger">
+        <div class="panel-header">
+          <h2>Experiment ledger</h2>
+          <span id="ledger-count" class="pill">0 total</span>
+        </div>
+        <div id="ledger-state" class="state">Load an index to get started.</div>
+        <div id="ledger-list" class="ledger-list"></div>
+      </section>
     </div>
 
     <script src="app.js"></script>
