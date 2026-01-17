@@ -2,7 +2,8 @@ const STATUS_ORDER = ["planned", "running", "completed", "failed", "canceled"];
 const DEFAULT_INDEX_PATHS = [
   "/.tmp/training-clean-2025-seriesid-index/experiment-index.json",
   "/.tmp/training-clean-2025-seriesid-baseline-elig/experiment-index.json",
-  "/.tmp/training-clean-2025-weights-matrix-seriesid-elig/experiment-index.json"
+  "/.tmp/training-clean-2025-weights-matrix-seriesid-elig/experiment-index.json",
+  "/.tmp/training-clean-2025-weights-matrix-seriesid-elig-tight/experiment-index.json"
 ];
 const STATUS_LABELS = {
   planned: "Planned",
