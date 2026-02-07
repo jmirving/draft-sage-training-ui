@@ -20,7 +20,7 @@ Visualization UI for DraftSage training experiments.
 - Read-only dashboards and experiment catalog views
 
 ## Quick start (no build step)
-Open `index.html` in your browser. It auto-loads the configured experiment
+Open `public/index.html` in your browser. It auto-loads the configured experiment
 indexes and merges them into one view.
 
 ## Quick launch (recommended)
@@ -50,7 +50,7 @@ python -m http.server 8000
 
 Then open:
 ```
-http://localhost:8000/draft-sage-training-ui/index.html
+http://localhost:8000/draft-sage-training-ui/public/index.html
 ```
 
 ## Mock data

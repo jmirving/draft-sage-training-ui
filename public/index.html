@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DraftSage Training UI</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <noscript>
+      This UI needs JavaScript enabled to load experiment metadata.
+    </noscript>
+
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="header-title">
+          <p class="eyebrow">DraftSage</p>
+          <h1>Training Decision Console</h1>
+          <p class="subtitle">
+            Track live runs, compare experiments, and decide the next move with
+            clarity.
+          </p>
+        </div>
+        <div class="header-meta">
+          <div>
+            <span class="label">Index path</span>
+            <span id="index-path" class="value">—</span>
+          </div>
+          <div>
+            <span class="label">Updated</span>
+            <span id="index-updated" class="value">—</span>
+          </div>
+          <div>
+            <span class="label">Last refresh</span>
+            <span id="index-refreshed" class="value">—</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="decision-row">
+        <section class="panel decision-card">
+          <div class="panel-header">
+            <h2>Running now</h2>
+            <span id="running-count" class="pill">0</span>
+          </div>
+          <div id="running-now" class="decision-body"></div>
+        </section>
+        <section class="panel decision-card">
+          <div class="panel-header">
+            <h2>True baseline</h2>
+            <span class="pill muted-pill">Pinned</span>
+          </div>
+          <div id="true-baseline" class="decision-body"></div>
+        </section>
+        <section class="panel decision-card">
+          <div class="panel-header">
+            <h2>Baseline to beat</h2>
+            <span class="pill muted-pill">Target</span>
+          </div>
+          <div id="baseline-to-beat" class="decision-body"></div>
+        </section>
+        <section class="panel decision-card">
+          <div class="panel-header">
+            <h2>Next decision</h2>
+            <span class="pill muted-pill">Cue</span>
+          </div>
+          <div id="next-decision" class="decision-body"></div>
+        </section>
+      </section>
+
+      <section class="panel controls-bar">
+        <div class="control-block">
+          <label for="status-filter">Status</label>
+          <select id="status-filter"></select>
+        </div>
+        <div class="control-block">
+          <label for="group-filter">Group</label>
+          <select id="group-filter"></select>
+        </div>
+        <div class="control-block">
+          <label for="metric-filter">Metric</label>
+          <select id="metric-filter">
+            <option value="accuracy" selected>Accuracy</option>
+            <option value="top_k">Top-k accuracy</option>
+          </select>
+        </div>
+      </section>
+
+      <main class="analysis-grid">
+        <section class="panel comparison">
+          <div class="panel-header">
+            <h2>Decision table</h2>
+            <span id="table-count" class="pill">0 groups</span>
+          </div>
+          <div id="table-state" class="state">Load an index to get started.</div>
+          <div class="table-wrap">
+            <table id="comparison-table">
+              <thead>
+                <tr>
+                  <th>Group</th>
+                  <th>Best variant</th>
+                  <th>Metric</th>
+                  <th>Delta vs target</th>
+                  <th>Status</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody id="comparison-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel detail">
+          <div class="panel-header">
+            <h2>Run detail</h2>
+            <span id="detail-status" class="status-badge">—</span>
+          </div>
+          <div id="detail-state" class="state">
+            Select a run to see its details.
+          </div>
+          <div id="detail-body" class="detail-body"></div>
+        </section>
+      </main>
+
+      <section class="panel ledger">
+        <div class="panel-header">
+          <h2>Experiment ledger</h2>
+          <span id="ledger-count" class="pill">0 total</span>
+        </div>
+        <div id="ledger-state" class="state">Load an index to get started.</div>
+        <div id="ledger-list" class="ledger-list"></div>
+      </section>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 PORT="${1:-8000}"
-UI_PATH="/draft-sage-training-ui/index.html"
+UI_PATH="/draft-sage-training-ui/public/index.html"
 
 echo "Serving from: ${ROOT_DIR}"
 echo "Open: http://localhost:${PORT}${UI_PATH}"
