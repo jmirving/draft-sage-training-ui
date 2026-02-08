@@ -5,6 +5,7 @@ const DEFAULT_INDEX_PATHS = [
   "/.tmp/training-clean-2025-weights-matrix-seriesid-elig/experiment-index.json",
   "/.tmp/training-clean-2025-weights-matrix-seriesid-elig-tight/experiment-index.json"
 ];
+const DEFAULT_DATA_HOST = "https://draft-sage-training-data.onrender.com";
 const STATUS_LABELS = {
   planned: "Planned",
   running: "Running",
@@ -124,10 +125,10 @@ function getQueryParam(name) {
 
 function resolveDefaultIndexPaths() {
   const dataHost = getQueryParam("dataHost");
-  if (!dataHost) {
+  if (!dataHost && !DEFAULT_DATA_HOST) {
     return DEFAULT_INDEX_PATHS;
   }
-  const normalized = dataHost.replace(/\/$/, "");
+  const normalized = (dataHost || DEFAULT_DATA_HOST).replace(/\/$/, "");
   return [`${normalized}/training/experiment-index.json`];
 }
 

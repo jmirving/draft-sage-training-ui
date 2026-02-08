@@ -41,6 +41,11 @@ You can also point the UI at a hosted data site by appending:
 ```
 The UI will load `https://<data-host>/training/experiment-index.json`.
 
+Default hosted data site (used when `?dataHost=` is not provided):
+```
+https://draft-sage-training-data.onrender.com
+```
+
 ## Legacy outputs (summary.json)
 Older runs may only provide a root-level `summary.json` array (for example,
 `/home/jirving/projects/lol/.tmp/training-clean-2025-ep20/summary.json`).
