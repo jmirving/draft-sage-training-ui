@@ -23,6 +23,15 @@ Visualization UI for DraftSage training experiments.
 Open `public/index.html` in your browser. It auto-loads the configured experiment
 indexes and merges them into one view.
 
+## Fresh clone checklist
+1. `git clone` the repo.
+2. Ensure `python3` is available (used only to serve static files).
+3. Run:
+   ```bash
+   ./draft-sage-training-ui/scripts/launch_ui.sh
+   ```
+4. Edit `public/app.js`, `public/styles.css`, or `public/index.html` and refresh.
+
 ## Quick launch (recommended)
 Serve the repo root and print the UI URL in one command:
 
