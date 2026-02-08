@@ -46,6 +46,11 @@ Default hosted data site (used when `?dataHost=` is not provided):
 https://draft-sage-training-data.onrender.com
 ```
 
+## Data hosting notes
+- The data host is a separate static site that serves `experiment-index.json` and per-run `summary.json`.
+- If the data host is on a different domain, add a CORS header on the data host:
+  `Access-Control-Allow-Origin: https://draft-sage-training-ui.onrender.com` (or `*`).
+
 ## Legacy outputs (summary.json)
 Older runs may only provide a root-level `summary.json` array (for example,
 `/home/jirving/projects/lol/.tmp/training-clean-2025-ep20/summary.json`).
