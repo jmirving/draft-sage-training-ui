@@ -368,6 +368,57 @@ button {
   gap: 10px;
 }
 
+.inspection {
+  background: rgba(43, 111, 127, 0.08);
+  border-radius: 14px;
+  padding: 16px;
+  border: 1px solid rgba(43, 111, 127, 0.2);
+}
+
+.inspection-body {
+  display: grid;
+  gap: 12px;
+}
+
+.inspection-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.inspection-list {
+  display: grid;
+  gap: 12px;
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.inspection-item {
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(25, 24, 23, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.inspection-item-header {
+  font-weight: 600;
+}
+
+.inspection-item-meta,
+.inspection-item-topk,
+.inspection-item-draft,
+.inspection-item-series {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.inspection-item-draft {
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
 .chip {
   padding: 6px 12px;
   border-radius: 999px;

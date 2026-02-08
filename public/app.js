@@ -30,6 +30,9 @@ const state = {
   summaryLoading: false,
   summaryError: null,
   summaryInline: false,
+  inspectionCache: new Map(),
+  inspectionLoading: new Set(),
+  inspectionError: new Map(),
   selectedRunId: null,
   statusFilter: "all",
   groupFilter: "all",
@@ -789,6 +792,7 @@ function renderDetail() {
   elements.detailBody.appendChild(metrics);
   elements.detailBody.appendChild(comparison);
   elements.detailBody.appendChild(artifacts);
+  elements.detailBody.appendChild(renderInspectionSection(selectedRun, summaryEntry));
 }
 
 function createMetaField(label, value) {
@@ -833,6 +837,212 @@ function createArtifactLink(label, relativePath, summaryEntry) {
   wrapper.appendChild(note);
 
   return wrapper;
+}
+
+function formatTopK(topK) {
+  if (!Array.isArray(topK) || topK.length === 0) {
+    return "—";
+  }
+  return topK
+    .map((entry) => {
+      if (!entry) {
+        return null;
+      }
+      const name = entry.champion || "Unknown";
+      const score =
+        typeof entry.score === "number" && !Number.isNaN(entry.score)
+          ? entry.score.toFixed(3)
+          : "—";
+      return `${name} (${score})`;
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
+function formatDraftSequence(sequence) {
+  if (!Array.isArray(sequence) || sequence.length === 0) {
+    return "—";
+  }
+  return sequence.map((entry) => (entry === 0 ? "—" : entry)).join(", ");
+}
+
+function renderInspectionSample(sample) {
+  const item = document.createElement("div");
+  item.className = "inspection-item";
+
+  const header = document.createElement("div");
+  header.className = "inspection-item-header";
+  const slot = sample?.slot ?? "—";
+  const side = sample?.side || "—";
+  const actionType = sample?.action_type || "—";
+  const target = sample?.target_champion || "—";
+  header.textContent = `Slot ${slot} · ${side} ${actionType} · Target ${target}`;
+
+  const meta = document.createElement("div");
+  meta.className = "inspection-item-meta";
+  const league = sample?.league || "—";
+  const patch = sample?.patch || "—";
+  const game = sample?.gameid || "—";
+  meta.textContent = `${league} · Patch ${patch} · Game ${game}`;
+
+  const topK = document.createElement("div");
+  topK.className = "inspection-item-topk";
+  topK.textContent = `Top-k: ${formatTopK(sample?.top_k)}`;
+
+  const draft = document.createElement("div");
+  draft.className = "inspection-item-draft";
+  draft.textContent = `Draft: ${formatDraftSequence(sample?.draft_sequence)}`;
+
+  const series = document.createElement("div");
+  series.className = "inspection-item-series";
+  const seriesUsed = Array.isArray(sample?.series_used_champions)
+    ? sample.series_used_champions
+    : [];
+  series.textContent = seriesUsed.length
+    ? `Prior series picks: ${seriesUsed.join(", ")}`
+    : "Prior series picks: —";
+
+  item.appendChild(header);
+  item.appendChild(meta);
+  item.appendChild(topK);
+  item.appendChild(draft);
+  item.appendChild(series);
+
+  return item;
+}
+
+function renderInspectionSection(run, summaryEntry) {
+  const summary = summaryEntry?.data;
+  const section = document.createElement("div");
+  section.className = "inspection";
+
+  const header = document.createElement("div");
+  header.className = "panel-header";
+  const title = document.createElement("h4");
+  title.textContent = "Inspection Samples";
+  const statusPill = document.createElement("span");
+  statusPill.className = "pill muted-pill";
+  const inspectionStatus = summary?.inspection_status || "missing";
+  statusPill.textContent = titleCase(inspectionStatus);
+  header.appendChild(title);
+  header.appendChild(statusPill);
+  section.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "inspection-body";
+
+  if (state.sourceType !== "fetch") {
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = "Serve over HTTP to load inspection samples.";
+    body.appendChild(note);
+    section.appendChild(body);
+    return section;
+  }
+
+  if (inspectionStatus === "failed") {
+    const error = document.createElement("p");
+    error.className = "muted";
+    error.textContent = summary?.inspection_error || "Inspection samples failed to generate.";
+    body.appendChild(error);
+    section.appendChild(body);
+    return section;
+  }
+
+  const inspectionPath = summary?.paths?.inspection_samples;
+  if (inspectionStatus !== "available" || !inspectionPath) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "Inspection samples not published for this run.";
+    body.appendChild(empty);
+    section.appendChild(body);
+    return section;
+  }
+
+  const cached = state.inspectionCache.get(run.run_id);
+  const loading = state.inspectionLoading.has(run.run_id);
+  const error = state.inspectionError.get(run.run_id);
+
+  if (!cached && !loading) {
+    fetchInspectionSamples(run.run_id, summaryEntry, inspectionPath);
+  }
+
+  if (loading) {
+    const loadingText = document.createElement("p");
+    loadingText.className = "muted";
+    loadingText.textContent = "Loading inspection samples…";
+    body.appendChild(loadingText);
+    section.appendChild(body);
+    return section;
+  }
+
+  if (error) {
+    const errorText = document.createElement("p");
+    errorText.className = "muted";
+    errorText.textContent = error;
+    body.appendChild(errorText);
+    section.appendChild(body);
+    return section;
+  }
+
+  const payload = cached?.data;
+  const meta = document.createElement("div");
+  meta.className = "inspection-meta";
+  meta.textContent = `Method: ${payload?.sample_method || "—"} · Size: ${
+    payload?.sample_size ?? "—"
+  } · Seed: ${payload?.sample_seed ?? "—"}`;
+  body.appendChild(meta);
+
+  const list = document.createElement("div");
+  list.className = "inspection-list";
+  const samples = Array.isArray(payload?.samples) ? payload.samples : [];
+  if (samples.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No inspection samples found.";
+    list.appendChild(empty);
+  } else {
+    samples.forEach((sample) => {
+      list.appendChild(renderInspectionSample(sample));
+    });
+  }
+  body.appendChild(list);
+
+  section.appendChild(body);
+  return section;
+}
+
+async function fetchInspectionSamples(runId, summaryEntry, relativePath) {
+  if (!summaryEntry?.summaryUrl) {
+    state.inspectionError.set(runId, "Missing summary URL for inspection samples.");
+    return;
+  }
+  if (state.inspectionLoading.has(runId)) {
+    return;
+  }
+  state.inspectionLoading.add(runId);
+  state.inspectionError.delete(runId);
+  renderDetail();
+
+  try {
+    const inspectionUrl = new URL(relativePath, summaryEntry.summaryUrl).toString();
+    const response = await fetch(withCacheBust(inspectionUrl), {
+      cache: "no-store"
+    });
+    if (!response.ok) {
+      throw new Error(`Inspection fetch failed (${response.status})`);
+    }
+    const data = await response.json();
+    state.inspectionCache.set(runId, { data, inspectionUrl });
+  } catch (error) {
+    state.inspectionError.set(
+      runId,
+      error.message || "Unable to load inspection samples."
+    );
+  } finally {
+    state.inspectionLoading.delete(runId);
+    renderDetail();
+  }
 }
 
 function renderFilters() {
@@ -1213,6 +1423,9 @@ function applyIndexResult(result, options = {}) {
   state.indexUrl = result.indexUrl;
   state.indexSources = result.indexSources || [result.indexPath].filter(Boolean);
   state.summaryCache.clear();
+  state.inspectionCache.clear();
+  state.inspectionLoading.clear();
+  state.inspectionError.clear();
   if (Array.isArray(result.summaries)) {
     result.summaries.forEach((entry) => state.summaryCache.set(entry.run_id, entry));
   }
