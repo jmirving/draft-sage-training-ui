@@ -117,6 +117,20 @@ function updateQueryParam(path) {
   window.history.replaceState({}, "", url);
 }
 
+function getQueryParam(name) {
+  const url = new URL(window.location.href);
+  return url.searchParams.get(name);
+}
+
+function resolveDefaultIndexPaths() {
+  const dataHost = getQueryParam("dataHost");
+  if (!dataHost) {
+    return DEFAULT_INDEX_PATHS;
+  }
+  const normalized = dataHost.replace(/\/$/, "");
+  return [`${normalized}/training/experiment-index.json`];
+}
+
 function withCacheBust(url) {
   const busted = new URL(url);
   busted.searchParams.set("_", Date.now().toString());
@@ -1430,7 +1444,7 @@ function init() {
   renderFilters();
   renderAll();
 
-  loadIndexFromFetch(DEFAULT_INDEX_PATHS, false);
+  loadIndexFromFetch(resolveDefaultIndexPaths(), false);
 }
 
 init();

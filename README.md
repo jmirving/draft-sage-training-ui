@@ -32,8 +32,14 @@ Serve the repo root and print the UI URL in one command:
 
 ## Default sources (auto-load)
 The UI loads a fixed list of experiment indexes defined in
-`draft-sage-training-ui/app.js` under `DEFAULT_INDEX_PATHS`. Update that list
+`draft-sage-training-ui/public/app.js` under `DEFAULT_INDEX_PATHS`. Update that list
 whenever a new output directory should be part of the UI.
+
+You can also point the UI at a hosted data site by appending:
+```
+?dataHost=https://<data-host>
+```
+The UI will load `https://<data-host>/training/experiment-index.json`.
 
 ## Legacy outputs (summary.json)
 Older runs may only provide a root-level `summary.json` array (for example,
