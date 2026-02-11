@@ -475,8 +475,57 @@ button {
   font-weight: 600;
 }
 
+.inspection-item-prediction {
+  display: grid;
+  gap: 6px;
+  background: rgba(217, 108, 61, 0.08);
+  border: 1px solid rgba(217, 108, 61, 0.24);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.inspection-item-prediction-row {
+  display: grid;
+  grid-template-columns: minmax(92px, auto) minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+
+.inspection-item-prediction-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.inspection-item-prediction-value {
+  color: var(--ink);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.inspection-item-prediction-badge {
+  justify-self: start;
+  margin-top: 2px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  background: rgba(95, 90, 82, 0.15);
+  color: var(--muted);
+}
+
+.inspection-item-prediction-badge.hit {
+  background: rgba(47, 125, 75, 0.2);
+  color: var(--ok);
+}
+
+.inspection-item-prediction-badge.miss {
+  background: rgba(179, 58, 53, 0.2);
+  color: var(--bad);
+}
+
 .inspection-item-meta,
-.inspection-item-topk,
 .inspection-item-draft,
 .inspection-item-series {
   color: var(--muted);

@@ -1107,6 +1107,23 @@ function formatDraftSequence(sequence) {
   return sequence.map((entry) => (entry === 0 ? "—" : entry)).join(", ");
 }
 
+function createInspectionPredictionRow(label, value) {
+  const row = document.createElement("div");
+  row.className = "inspection-item-prediction-row";
+
+  const key = document.createElement("span");
+  key.className = "inspection-item-prediction-label";
+  key.textContent = label;
+
+  const content = document.createElement("span");
+  content.className = "inspection-item-prediction-value";
+  content.textContent = value;
+
+  row.appendChild(key);
+  row.appendChild(content);
+  return row;
+}
+
 function renderInspectionSample(sample) {
   const item = document.createElement("div");
   item.className = "inspection-item";
@@ -1116,8 +1133,7 @@ function renderInspectionSample(sample) {
   const slot = sample?.slot ?? "—";
   const side = sample?.side || "—";
   const actionType = sample?.action_type || "—";
-  const target = sample?.target_champion || "—";
-  header.textContent = `Slot ${slot} · ${side} ${actionType} · Target ${target}`;
+  header.textContent = `Slot ${slot} · ${side} ${actionType}`;
 
   const meta = document.createElement("div");
   meta.className = "inspection-item-meta";
@@ -1126,9 +1142,30 @@ function renderInspectionSample(sample) {
   const game = sample?.gameid || "—";
   meta.textContent = `${league} · Patch ${patch} · Game ${game}`;
 
-  const topK = document.createElement("div");
-  topK.className = "inspection-item-topk";
-  topK.textContent = `Top-k: ${formatTopK(sample?.top_k)}`;
+  const topKEntries = Array.isArray(sample?.top_k) ? sample.top_k.filter(Boolean) : [];
+  const predicted = topKEntries.length > 0 ? topKEntries[0].champion || "Unknown" : "—";
+  const actual = sample?.target_champion || "—";
+  const topKText = formatTopK(sample?.top_k);
+  const hasComparablePrediction = predicted !== "—" && actual !== "—";
+  const predictionState = hasComparablePrediction
+    ? predicted === actual
+      ? "Top-1 hit"
+      : "Top-1 miss"
+    : "Top-1 n/a";
+
+  const predictionBlock = document.createElement("div");
+  predictionBlock.className = "inspection-item-prediction";
+  predictionBlock.appendChild(createInspectionPredictionRow("Model top-1", predicted));
+  predictionBlock.appendChild(createInspectionPredictionRow("Actual", actual));
+  predictionBlock.appendChild(createInspectionPredictionRow("Top-k", topKText));
+
+  const predictionBadge = document.createElement("span");
+  predictionBadge.className = "inspection-item-prediction-badge";
+  if (hasComparablePrediction) {
+    predictionBadge.classList.add(predicted === actual ? "hit" : "miss");
+  }
+  predictionBadge.textContent = predictionState;
+  predictionBlock.appendChild(predictionBadge);
 
   const draft = document.createElement("div");
   draft.className = "inspection-item-draft";
@@ -1145,7 +1182,7 @@ function renderInspectionSample(sample) {
 
   item.appendChild(header);
   item.appendChild(meta);
-  item.appendChild(topK);
+  item.appendChild(predictionBlock);
   item.appendChild(draft);
   item.appendChild(series);
 
