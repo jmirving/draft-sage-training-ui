@@ -48,7 +48,12 @@ const state = {
   refreshError: null,
   indexRefreshing: false,
   groupLabels: new Map(),
-  indexSources: []
+  indexSources: [],
+  perSlotExpandedRunIds: new Set(),
+  tableSort: {
+    key: "metric",
+    direction: "desc"
+  }
 };
 
 const elements = {
@@ -66,6 +71,9 @@ const elements = {
   tableCount: document.getElementById("table-count"),
   tableState: document.getElementById("table-state"),
   comparisonBody: document.getElementById("comparison-body"),
+  comparisonHeaders: Array.from(
+    document.querySelectorAll("#comparison-table thead th[data-sort]")
+  ),
   detailState: document.getElementById("detail-state"),
   detailBody: document.getElementById("detail-body"),
   detailStatus: document.getElementById("detail-status"),
@@ -163,26 +171,18 @@ function normalizePerSlotMetrics(summary) {
     .sort((a, b) => a.slot - b.slot);
 }
 
-function formatCanonicalSlot(row) {
+function formatTeamSlotLabel(row) {
   const side = row?.canonicalSide;
   const type = row?.canonicalType;
   const num = row?.canonicalNum;
   if (!side && !type && !num) {
-    return "—";
+    return `Slot ${row?.slot ?? "?"}`;
   }
-  const sideLabel =
-    side === "blue" ? "Blue" : side === "red" ? "Red" : titleCase(String(side));
-  const typeLabel = type ? titleCase(String(type)) : "";
+  const teamLabel =
+    side === "blue" ? "Team 1" : side === "red" ? "Team 2" : "Team ?";
+  const typeLabel = type ? titleCase(String(type)) : "Action";
   const numLabel = typeof num === "number" ? ` ${num}` : "";
-  return `${sideLabel} ${typeLabel}${numLabel}`.trim();
-}
-
-function formatSlotSummaryLabel(row) {
-  const canonical = formatCanonicalSlot(row);
-  if (canonical === "—") {
-    return `Slot ${row.slot}`;
-  }
-  return `Slot ${row.slot} · ${canonical}`;
+  return `${teamLabel} ${typeLabel}${numLabel}`.trim();
 }
 
 function titleCase(value) {
@@ -566,6 +566,7 @@ function renderDecisionItem(run, includeProgress, showDataset) {
 
 function renderComparisonTable() {
   elements.comparisonBody.innerHTML = "";
+  renderComparisonSortHeaders();
   const runs = getFilteredRuns();
   elements.tableCount.textContent = `${new Set(runs.map(getGroupKey)).size} groups`;
 
@@ -593,8 +594,22 @@ function renderComparisonTable() {
 
   const baselineToBeat = getBaselineToBeatRun();
   const baselineMetric = baselineToBeat ? getMetricValue(baselineToBeat) : null;
-  const groups = Array.from(buildGroupStats(runs).values());
-  groups.sort((a, b) => a.label.localeCompare(b.label));
+  const groups = Array.from(buildGroupStats(runs).values()).map((group, index) => {
+    const metricValue = group.best ? getMetricValue(group.best) : null;
+    const delta = computeDelta(metricValue, baselineMetric);
+    const updatedRaw = getRunUpdatedAt(group.best);
+    const updatedTs = updatedRaw ? new Date(updatedRaw).getTime() : Number.NEGATIVE_INFINITY;
+    return {
+      ...group,
+      metricValue,
+      delta,
+      updatedRaw,
+      updatedTs: Number.isNaN(updatedTs) ? Number.NEGATIVE_INFINITY : updatedTs,
+      statusLabel: STATUS_LABELS[group.best?.status] || group.best?.status || "—",
+      index
+    };
+  });
+  groups.sort(compareComparisonRows);
 
   groups.forEach((group) => {
     const row = document.createElement("tr");
@@ -602,35 +617,103 @@ function renderComparisonTable() {
       row.classList.add("active");
     }
     row.addEventListener("click", () => selectRun(group.best?.run_id));
-
-    const metricValue = group.best ? getMetricValue(group.best) : null;
-    const delta = computeDelta(metricValue, baselineMetric);
     const deltaClass =
-      delta === null
+      group.delta === null
         ? "neutral"
-        : delta > 0
+        : group.delta > 0
           ? "positive"
-          : delta < 0
+          : group.delta < 0
             ? "negative"
             : "neutral";
 
     row.appendChild(createCell(group.label));
     row.appendChild(createCell(group.best ? getVariantLabel(group.best) : "—"));
-    row.appendChild(createCell(metricValue !== null ? formatNumber(metricValue) : "—"));
+    row.appendChild(
+      createCell(group.metricValue !== null ? formatNumber(group.metricValue) : "—")
+    );
 
     const deltaCell = document.createElement("td");
     const deltaSpan = document.createElement("span");
     deltaSpan.className = `delta ${deltaClass}`;
-    deltaSpan.textContent = delta !== null ? formatDelta(delta) : "—";
+    deltaSpan.textContent = group.delta !== null ? formatDelta(group.delta) : "—";
     deltaCell.appendChild(deltaSpan);
     row.appendChild(deltaCell);
 
-    row.appendChild(
-      createCell(STATUS_LABELS[group.best?.status] || group.best?.status || "—")
-    );
-    row.appendChild(createCell(formatDate(getRunUpdatedAt(group.best))));
+    row.appendChild(createCell(group.statusLabel));
+    row.appendChild(createCell(formatDate(group.updatedRaw)));
 
     elements.comparisonBody.appendChild(row);
+  });
+}
+
+function compareNullableNumbers(a, b, direction = "asc") {
+  const aMissing = typeof a !== "number" || Number.isNaN(a);
+  const bMissing = typeof b !== "number" || Number.isNaN(b);
+  if (aMissing && bMissing) {
+    return 0;
+  }
+  if (aMissing) {
+    return 1;
+  }
+  if (bMissing) {
+    return -1;
+  }
+  return direction === "asc" ? a - b : b - a;
+}
+
+function compareNullableStrings(a, b) {
+  const aValue = (a || "").toString().toLowerCase();
+  const bValue = (b || "").toString().toLowerCase();
+  return aValue.localeCompare(bValue);
+}
+
+function compareComparisonRows(a, b) {
+  const direction = state.tableSort.direction;
+  let base = 0;
+  switch (state.tableSort.key) {
+    case "group":
+      base = compareNullableStrings(a.label, b.label);
+      break;
+    case "variant":
+      base = compareNullableStrings(
+        a.best ? getVariantLabel(a.best) : "",
+        b.best ? getVariantLabel(b.best) : ""
+      );
+      break;
+    case "metric":
+      base = compareNullableNumbers(a.metricValue, b.metricValue, direction);
+      break;
+    case "delta":
+      base = compareNullableNumbers(a.delta, b.delta, direction);
+      break;
+    case "status":
+      base = compareNullableStrings(a.statusLabel, b.statusLabel);
+      break;
+    case "updated":
+      base = compareNullableNumbers(a.updatedTs, b.updatedTs, direction);
+      break;
+    default:
+      base = compareNullableStrings(a.label, b.label);
+      break;
+  }
+  if (direction === "desc" && (state.tableSort.key === "group" || state.tableSort.key === "variant" || state.tableSort.key === "status")) {
+    base *= -1;
+  }
+  if (base === 0) {
+    return a.index - b.index;
+  }
+  return base;
+}
+
+function renderComparisonSortHeaders() {
+  elements.comparisonHeaders.forEach((header) => {
+    const key = header.dataset.sort || "";
+    const label = header.dataset.label || header.textContent || "";
+    const active = state.tableSort.key === key;
+    const arrow = active ? (state.tableSort.direction === "asc" ? " ↑" : " ↓") : "";
+    header.textContent = `${label}${arrow}`;
+    header.classList.toggle("active-sort", active);
+    header.classList.add("sortable-header");
   });
 }
 
@@ -873,12 +956,12 @@ function renderDetail() {
   elements.detailBody.appendChild(detailGrid);
   elements.detailBody.appendChild(metrics);
   elements.detailBody.appendChild(comparison);
-  elements.detailBody.appendChild(renderPerSlotSection(summary));
+  elements.detailBody.appendChild(renderPerSlotSection(summary, selectedRun.run_id));
   elements.detailBody.appendChild(artifacts);
   elements.detailBody.appendChild(renderInspectionSection(selectedRun, summaryEntry));
 }
 
-function renderPerSlotSection(summary) {
+function renderPerSlotSection(summary, runId) {
   const section = document.createElement("section");
   section.className = "per-slot";
 
@@ -907,111 +990,47 @@ function renderPerSlotSection(summary) {
     return section;
   }
 
-  const sampledRows = rows.filter((row) => row.total > 0);
-  const observedTotal = sampledRows.reduce((sum, row) => sum + row.total, 0);
-  const correctTotal = sampledRows.reduce((sum, row) => sum + row.correct, 0);
-  const weightedAccuracy = observedTotal > 0 ? correctTotal / observedTotal : null;
-  const bestSlot = sampledRows.reduce((best, row) => {
-    if (!best || (row.accuracy ?? -1) > (best.accuracy ?? -1)) {
-      return row;
-    }
-    return best;
-  }, null);
-  const weakestSlot = sampledRows.reduce((worst, row) => {
-    if (!worst || (row.accuracy ?? 2) < (worst.accuracy ?? 2)) {
-      return row;
-    }
-    return worst;
-  }, null);
+  const collapsedCount = 6;
+  const expanded = state.perSlotExpandedRunIds.has(runId);
+  const visibleRows = expanded ? rows : rows.slice(0, collapsedCount);
 
-  const summaryGrid = document.createElement("div");
-  summaryGrid.className = "per-slot-summary";
-  summaryGrid.appendChild(
-    createMetaField("Slots covered", `${sampledRows.length}/${rows.length}`)
-  );
-  summaryGrid.appendChild(createMetaField("Observed events", `${observedTotal}`));
-  summaryGrid.appendChild(
-    createMetaField("Weighted accuracy", formatPercent(weightedAccuracy))
-  );
-  summaryGrid.appendChild(
-    createMetaField(
-      "Best slot",
-      bestSlot
-        ? `${formatSlotSummaryLabel(bestSlot)} (${formatPercent(bestSlot.accuracy)})`
-        : "—"
-    )
-  );
-  summaryGrid.appendChild(
-    createMetaField(
-      "Weakest slot",
-      weakestSlot
-        ? `${formatSlotSummaryLabel(weakestSlot)} (${formatPercent(weakestSlot.accuracy)})`
-        : "—"
-    )
-  );
-  body.appendChild(summaryGrid);
+  const list = document.createElement("div");
+  list.className = "per-slot-list";
+  visibleRows.forEach((row) => {
+    const item = document.createElement("div");
+    item.className = "per-slot-item";
 
-  const tableWrap = document.createElement("div");
-  tableWrap.className = "per-slot-table-wrap";
+    const name = document.createElement("span");
+    name.className = "per-slot-name";
+    name.textContent = formatTeamSlotLabel(row);
 
-  const table = document.createElement("table");
-  table.className = "per-slot-table";
+    const value = document.createElement("span");
+    value.className = "per-slot-percent";
+    value.textContent = formatPercent(row.accuracy);
 
-  const thead = document.createElement("thead");
-  const headerRow = document.createElement("tr");
-  ["Slot", "Canonical", "Observed B/R", "Correct / Total", "Accuracy"].forEach(
-    (label) => {
-      const th = document.createElement("th");
-      th.textContent = label;
-      headerRow.appendChild(th);
-    }
-  );
-  thead.appendChild(headerRow);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  rows.forEach((row) => {
-    const tr = document.createElement("tr");
-
-    const slotCell = document.createElement("td");
-    slotCell.textContent = `Slot ${row.slot}`;
-    tr.appendChild(slotCell);
-
-    const canonicalCell = document.createElement("td");
-    canonicalCell.textContent = formatCanonicalSlot(row);
-    tr.appendChild(canonicalCell);
-
-    const observedCell = document.createElement("td");
-    observedCell.textContent = `${row.observedBlue}/${row.observedRed}`;
-    tr.appendChild(observedCell);
-
-    const countsCell = document.createElement("td");
-    countsCell.textContent = `${row.correct}/${row.total}`;
-    tr.appendChild(countsCell);
-
-    const accuracyCell = document.createElement("td");
-    accuracyCell.className = "slot-accuracy-cell";
-    const accuracyText = document.createElement("span");
-    accuracyText.className = "slot-accuracy-value";
-    accuracyText.textContent = formatPercent(row.accuracy);
-    accuracyCell.appendChild(accuracyText);
-
-    if (typeof row.accuracy === "number") {
-      const track = document.createElement("div");
-      track.className = "slot-accuracy-track";
-      const fill = document.createElement("span");
-      fill.className = "slot-accuracy-fill";
-      fill.style.width = `${(row.accuracy * 100).toFixed(1)}%`;
-      track.appendChild(fill);
-      accuracyCell.appendChild(track);
-    }
-
-    tr.appendChild(accuracyCell);
-    tbody.appendChild(tr);
+    item.appendChild(name);
+    item.appendChild(value);
+    list.appendChild(item);
   });
-  table.appendChild(tbody);
-  tableWrap.appendChild(table);
-  body.appendChild(tableWrap);
+  body.appendChild(list);
+
+  if (rows.length > collapsedCount) {
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "per-slot-toggle";
+    toggle.textContent = expanded
+      ? "Show fewer slots"
+      : `See all ${rows.length} slots`;
+    toggle.addEventListener("click", () => {
+      if (state.perSlotExpandedRunIds.has(runId)) {
+        state.perSlotExpandedRunIds.delete(runId);
+      } else {
+        state.perSlotExpandedRunIds.add(runId);
+      }
+      renderDetail();
+    });
+    body.appendChild(toggle);
+  }
 
   section.appendChild(body);
   return section;
@@ -1870,6 +1889,25 @@ function attachEventHandlers() {
   elements.metricFilter.addEventListener("change", (event) => {
     state.metricKey = event.target.value;
     renderAll();
+  });
+
+  elements.comparisonHeaders.forEach((header) => {
+    header.addEventListener("click", () => {
+      const key = header.dataset.sort;
+      if (!key) {
+        return;
+      }
+      if (state.tableSort.key === key) {
+        state.tableSort.direction =
+          state.tableSort.direction === "asc" ? "desc" : "asc";
+      } else {
+        state.tableSort.key = key;
+        state.tableSort.direction = key === "group" || key === "variant" || key === "status"
+          ? "asc"
+          : "desc";
+      }
+      renderComparisonTable();
+    });
   });
 }
 
