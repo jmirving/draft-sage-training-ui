@@ -22,6 +22,62 @@
   "metrics": {
     "accuracy": 0.186,
     "loss": 1.19,
+    "per_slot_accuracy": [
+      {
+        "slot": 1,
+        "slot_id": "slot_01",
+        "canonical": { "side": "blue", "type": "ban", "num": 1 },
+        "observed_side_counts": { "blue": 11, "red": 2 },
+        "correct": 3,
+        "total": 13,
+        "accuracy": 0.231
+      },
+      {
+        "slot": 2,
+        "slot_id": "slot_02",
+        "canonical": { "side": "red", "type": "ban", "num": 1 },
+        "observed_side_counts": { "blue": 9, "red": 10 },
+        "correct": 5,
+        "total": 19,
+        "accuracy": 0.263
+      },
+      {
+        "slot": 3,
+        "slot_id": "slot_03",
+        "canonical": { "side": "blue", "type": "ban", "num": 2 },
+        "observed_side_counts": { "blue": 12, "red": 3 },
+        "correct": 2,
+        "total": 15,
+        "accuracy": 0.133
+      },
+      {
+        "slot": 4,
+        "slot_id": "slot_04",
+        "canonical": { "side": "red", "type": "ban", "num": 2 },
+        "observed_side_counts": { "blue": 7, "red": 12 },
+        "correct": 6,
+        "total": 19,
+        "accuracy": 0.316
+      },
+      {
+        "slot": 5,
+        "slot_id": "slot_05",
+        "canonical": { "side": "blue", "type": "ban", "num": 3 },
+        "observed_side_counts": { "blue": 6, "red": 4 },
+        "correct": 1,
+        "total": 10,
+        "accuracy": 0.1
+      },
+      {
+        "slot": 6,
+        "slot_id": "slot_06",
+        "canonical": { "side": "red", "type": "ban", "num": 3 },
+        "observed_side_counts": { "blue": 0, "red": 0 },
+        "correct": 0,
+        "total": 0,
+        "accuracy": null
+      }
+    ],
     "top_k": {
       "k": 3,
       "accuracy": 0.42

@@ -95,12 +95,94 @@ function formatNumber(value, digits = 4) {
   return value.toFixed(digits);
 }
 
+function formatPercent(value, digits = 1) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "—";
+  }
+
+  return `${(value * 100).toFixed(digits)}%`;
+}
+
 function formatDelta(value, digits = 4) {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return "—";
   }
   const sign = value > 0 ? "+" : value < 0 ? "" : "";
   return `${sign}${value.toFixed(digits)}`;
+}
+
+function toCount(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(value));
+}
+
+function normalizePerSlotMetrics(summary) {
+  const rows = summary?.metrics?.per_slot_accuracy;
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+  return rows
+    .map((row, index) => {
+      const slot =
+        typeof row?.slot === "number" && row.slot > 0
+          ? Math.floor(row.slot)
+          : index + 1;
+      const correct = toCount(row?.correct);
+      const total = toCount(row?.total);
+      const providedAccuracy =
+        typeof row?.accuracy === "number" && !Number.isNaN(row.accuracy)
+          ? row.accuracy
+          : null;
+      const accuracy =
+        providedAccuracy !== null
+          ? Math.min(1, Math.max(0, providedAccuracy))
+          : total > 0
+            ? correct / total
+            : null;
+      return {
+        slot,
+        slotId:
+          typeof row?.slot_id === "string" && row.slot_id.length > 0
+            ? row.slot_id
+            : `slot_${slot.toString().padStart(2, "0")}`,
+        canonicalSide: row?.canonical?.side || null,
+        canonicalType: row?.canonical?.type || null,
+        canonicalNum:
+          typeof row?.canonical?.num === "number" && row.canonical.num > 0
+            ? Math.floor(row.canonical.num)
+            : null,
+        observedBlue: toCount(row?.observed_side_counts?.blue),
+        observedRed: toCount(row?.observed_side_counts?.red),
+        correct,
+        total,
+        accuracy
+      };
+    })
+    .sort((a, b) => a.slot - b.slot);
+}
+
+function formatCanonicalSlot(row) {
+  const side = row?.canonicalSide;
+  const type = row?.canonicalType;
+  const num = row?.canonicalNum;
+  if (!side && !type && !num) {
+    return "—";
+  }
+  const sideLabel =
+    side === "blue" ? "Blue" : side === "red" ? "Red" : titleCase(String(side));
+  const typeLabel = type ? titleCase(String(type)) : "";
+  const numLabel = typeof num === "number" ? ` ${num}` : "";
+  return `${sideLabel} ${typeLabel}${numLabel}`.trim();
+}
+
+function formatSlotSummaryLabel(row) {
+  const canonical = formatCanonicalSlot(row);
+  if (canonical === "—") {
+    return `Slot ${row.slot}`;
+  }
+  return `Slot ${row.slot} · ${canonical}`;
 }
 
 function titleCase(value) {
@@ -791,8 +873,148 @@ function renderDetail() {
   elements.detailBody.appendChild(detailGrid);
   elements.detailBody.appendChild(metrics);
   elements.detailBody.appendChild(comparison);
+  elements.detailBody.appendChild(renderPerSlotSection(summary));
   elements.detailBody.appendChild(artifacts);
   elements.detailBody.appendChild(renderInspectionSection(selectedRun, summaryEntry));
+}
+
+function renderPerSlotSection(summary) {
+  const section = document.createElement("section");
+  section.className = "per-slot";
+
+  const header = document.createElement("div");
+  header.className = "panel-header";
+  const title = document.createElement("h4");
+  title.textContent = "Per-Slot Accuracy";
+  const count = document.createElement("span");
+  count.className = "pill muted-pill";
+  header.appendChild(title);
+  header.appendChild(count);
+  section.appendChild(header);
+
+  const rows = normalizePerSlotMetrics(summary);
+  count.textContent = rows.length > 0 ? `${rows.length} slots` : "Not published";
+
+  const body = document.createElement("div");
+  body.className = "per-slot-body";
+
+  if (rows.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "Per-slot metrics were not published for this run.";
+    body.appendChild(empty);
+    section.appendChild(body);
+    return section;
+  }
+
+  const sampledRows = rows.filter((row) => row.total > 0);
+  const observedTotal = sampledRows.reduce((sum, row) => sum + row.total, 0);
+  const correctTotal = sampledRows.reduce((sum, row) => sum + row.correct, 0);
+  const weightedAccuracy = observedTotal > 0 ? correctTotal / observedTotal : null;
+  const bestSlot = sampledRows.reduce((best, row) => {
+    if (!best || (row.accuracy ?? -1) > (best.accuracy ?? -1)) {
+      return row;
+    }
+    return best;
+  }, null);
+  const weakestSlot = sampledRows.reduce((worst, row) => {
+    if (!worst || (row.accuracy ?? 2) < (worst.accuracy ?? 2)) {
+      return row;
+    }
+    return worst;
+  }, null);
+
+  const summaryGrid = document.createElement("div");
+  summaryGrid.className = "per-slot-summary";
+  summaryGrid.appendChild(
+    createMetaField("Slots covered", `${sampledRows.length}/${rows.length}`)
+  );
+  summaryGrid.appendChild(createMetaField("Observed events", `${observedTotal}`));
+  summaryGrid.appendChild(
+    createMetaField("Weighted accuracy", formatPercent(weightedAccuracy))
+  );
+  summaryGrid.appendChild(
+    createMetaField(
+      "Best slot",
+      bestSlot
+        ? `${formatSlotSummaryLabel(bestSlot)} (${formatPercent(bestSlot.accuracy)})`
+        : "—"
+    )
+  );
+  summaryGrid.appendChild(
+    createMetaField(
+      "Weakest slot",
+      weakestSlot
+        ? `${formatSlotSummaryLabel(weakestSlot)} (${formatPercent(weakestSlot.accuracy)})`
+        : "—"
+    )
+  );
+  body.appendChild(summaryGrid);
+
+  const tableWrap = document.createElement("div");
+  tableWrap.className = "per-slot-table-wrap";
+
+  const table = document.createElement("table");
+  table.className = "per-slot-table";
+
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  ["Slot", "Canonical", "Observed B/R", "Correct / Total", "Accuracy"].forEach(
+    (label) => {
+      const th = document.createElement("th");
+      th.textContent = label;
+      headerRow.appendChild(th);
+    }
+  );
+  thead.appendChild(headerRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+
+    const slotCell = document.createElement("td");
+    slotCell.textContent = `Slot ${row.slot}`;
+    tr.appendChild(slotCell);
+
+    const canonicalCell = document.createElement("td");
+    canonicalCell.textContent = formatCanonicalSlot(row);
+    tr.appendChild(canonicalCell);
+
+    const observedCell = document.createElement("td");
+    observedCell.textContent = `${row.observedBlue}/${row.observedRed}`;
+    tr.appendChild(observedCell);
+
+    const countsCell = document.createElement("td");
+    countsCell.textContent = `${row.correct}/${row.total}`;
+    tr.appendChild(countsCell);
+
+    const accuracyCell = document.createElement("td");
+    accuracyCell.className = "slot-accuracy-cell";
+    const accuracyText = document.createElement("span");
+    accuracyText.className = "slot-accuracy-value";
+    accuracyText.textContent = formatPercent(row.accuracy);
+    accuracyCell.appendChild(accuracyText);
+
+    if (typeof row.accuracy === "number") {
+      const track = document.createElement("div");
+      track.className = "slot-accuracy-track";
+      const fill = document.createElement("span");
+      fill.className = "slot-accuracy-fill";
+      fill.style.width = `${(row.accuracy * 100).toFixed(1)}%`;
+      track.appendChild(fill);
+      accuracyCell.appendChild(track);
+    }
+
+    tr.appendChild(accuracyCell);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  tableWrap.appendChild(table);
+  body.appendChild(tableWrap);
+
+  section.appendChild(body);
+  return section;
 }
 
 function createMetaField(label, value) {
