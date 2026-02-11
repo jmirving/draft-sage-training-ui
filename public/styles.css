@@ -368,6 +368,34 @@ button {
   gap: 12px;
 }
 
+.per-slot-extremes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.per-slot-extreme {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(25, 24, 23, 0.1);
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.per-slot-extreme-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.per-slot-extreme-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 .per-slot-list {
   display: grid;
   gap: 8px;
@@ -515,12 +543,32 @@ button {
   color: var(--muted);
 }
 
-.inspection-item-prediction-badge.hit {
+.inspection-item-prediction.rank-top1 {
+  background: rgba(47, 125, 75, 0.12);
+  border-color: rgba(47, 125, 75, 0.32);
+}
+
+.inspection-item-prediction.rank-top5 {
+  background: rgba(155, 141, 74, 0.14);
+  border-color: rgba(155, 141, 74, 0.32);
+}
+
+.inspection-item-prediction.rank-out {
+  background: rgba(179, 58, 53, 0.12);
+  border-color: rgba(179, 58, 53, 0.32);
+}
+
+.inspection-item-prediction-badge.rank-top1 {
   background: rgba(47, 125, 75, 0.2);
   color: var(--ok);
 }
 
-.inspection-item-prediction-badge.miss {
+.inspection-item-prediction-badge.rank-top5 {
+  background: rgba(155, 141, 74, 0.22);
+  color: var(--paused);
+}
+
+.inspection-item-prediction-badge.rank-out {
   background: rgba(179, 58, 53, 0.2);
   color: var(--bad);
 }

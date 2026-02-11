@@ -990,6 +990,28 @@ function renderPerSlotSection(summary, runId) {
     return section;
   }
 
+  const sampledRows = rows.filter(
+    (row) => row.total > 0 && typeof row.accuracy === "number" && !Number.isNaN(row.accuracy)
+  );
+  const bestSlot = sampledRows.reduce((best, row) => {
+    if (!best || row.accuracy > best.accuracy) {
+      return row;
+    }
+    return best;
+  }, null);
+  const worstSlot = sampledRows.reduce((worst, row) => {
+    if (!worst || row.accuracy < worst.accuracy) {
+      return row;
+    }
+    return worst;
+  }, null);
+
+  const extremes = document.createElement("div");
+  extremes.className = "per-slot-extremes";
+  extremes.appendChild(createPerSlotExtreme("Best", bestSlot));
+  extremes.appendChild(createPerSlotExtreme("Worst", worstSlot));
+  body.appendChild(extremes);
+
   const collapsedCount = 6;
   const expanded = state.perSlotExpandedRunIds.has(runId);
   const visibleRows = expanded ? rows : rows.slice(0, collapsedCount);
@@ -1034,6 +1056,25 @@ function renderPerSlotSection(summary, runId) {
 
   section.appendChild(body);
   return section;
+}
+
+function createPerSlotExtreme(label, row) {
+  const card = document.createElement("div");
+  card.className = "per-slot-extreme";
+
+  const heading = document.createElement("span");
+  heading.className = "per-slot-extreme-label";
+  heading.textContent = label;
+
+  const value = document.createElement("span");
+  value.className = "per-slot-extreme-value";
+  value.textContent = row
+    ? `${formatTeamSlotLabel(row)} (${formatPercent(row.accuracy)})`
+    : "—";
+
+  card.appendChild(heading);
+  card.appendChild(value);
+  return card;
 }
 
 function createMetaField(label, value) {
@@ -1124,6 +1165,43 @@ function createInspectionPredictionRow(label, value) {
   return row;
 }
 
+function classifyInspectionPrediction(actual, topKEntries) {
+  const actualName = typeof actual === "string" ? actual.trim() : "";
+  if (
+    actualName.length === 0 ||
+    actualName === "—" ||
+    !Array.isArray(topKEntries) ||
+    topKEntries.length === 0
+  ) {
+    return {
+      rank: "na",
+      label: "No comparable target"
+    };
+  }
+
+  const champions = topKEntries
+    .map((entry) => entry?.champion)
+    .filter((champion) => typeof champion === "string" && champion.length > 0)
+    .map((champion) => champion.trim().toLowerCase());
+  const actualRank = champions.indexOf(actualName.toLowerCase());
+  if (actualRank === 0) {
+    return {
+      rank: "top1",
+      label: "Top-1 match"
+    };
+  }
+  if (actualRank > 0) {
+    return {
+      rank: "top5",
+      label: "In top-5 (not top-1)"
+    };
+  }
+  return {
+    rank: "out",
+    label: "Missed top-5"
+  };
+}
+
 function renderInspectionSample(sample) {
   const item = document.createElement("div");
   item.className = "inspection-item";
@@ -1146,25 +1224,19 @@ function renderInspectionSample(sample) {
   const predicted = topKEntries.length > 0 ? topKEntries[0].champion || "Unknown" : "—";
   const actual = sample?.target_champion || "—";
   const topKText = formatTopK(sample?.top_k);
-  const hasComparablePrediction = predicted !== "—" && actual !== "—";
-  const predictionState = hasComparablePrediction
-    ? predicted === actual
-      ? "Top-1 hit"
-      : "Top-1 miss"
-    : "Top-1 n/a";
+  const predictionState = classifyInspectionPrediction(actual, topKEntries);
 
   const predictionBlock = document.createElement("div");
   predictionBlock.className = "inspection-item-prediction";
+  predictionBlock.classList.add(`rank-${predictionState.rank}`);
   predictionBlock.appendChild(createInspectionPredictionRow("Model top-1", predicted));
   predictionBlock.appendChild(createInspectionPredictionRow("Actual", actual));
   predictionBlock.appendChild(createInspectionPredictionRow("Top-k", topKText));
 
   const predictionBadge = document.createElement("span");
   predictionBadge.className = "inspection-item-prediction-badge";
-  if (hasComparablePrediction) {
-    predictionBadge.classList.add(predicted === actual ? "hit" : "miss");
-  }
-  predictionBadge.textContent = predictionState;
+  predictionBadge.classList.add(`rank-${predictionState.rank}`);
+  predictionBadge.textContent = predictionState.label;
   predictionBlock.appendChild(predictionBadge);
 
   const draft = document.createElement("div");
@@ -1700,10 +1772,31 @@ function applyIndexResult(result, options = {}) {
   state.indexPath = result.indexPath;
   state.indexUrl = result.indexUrl;
   state.indexSources = result.indexSources || [result.indexPath].filter(Boolean);
-  state.summaryCache.clear();
-  state.inspectionCache.clear();
-  state.inspectionLoading.clear();
-  state.inspectionError.clear();
+  const runIds = new Set(
+    (Array.isArray(result.indexData?.runs) ? result.indexData.runs : [])
+      .map((run) => run?.run_id)
+      .filter(Boolean)
+  );
+  state.summaryCache.forEach((_, runId) => {
+    if (!runIds.has(runId)) {
+      state.summaryCache.delete(runId);
+    }
+  });
+  state.inspectionCache.forEach((_, runId) => {
+    if (!runIds.has(runId)) {
+      state.inspectionCache.delete(runId);
+    }
+  });
+  state.inspectionLoading.forEach((runId) => {
+    if (!runIds.has(runId)) {
+      state.inspectionLoading.delete(runId);
+    }
+  });
+  state.inspectionError.forEach((_, runId) => {
+    if (!runIds.has(runId)) {
+      state.inspectionError.delete(runId);
+    }
+  });
   if (Array.isArray(result.summaries)) {
     result.summaries.forEach((entry) => state.summaryCache.set(entry.run_id, entry));
   }
@@ -1731,9 +1824,22 @@ function rebuildGroupLabels() {
 }
 
 async function fetchSummary(run, options = {}) {
-  const { silent = false } = options;
+  const { silent = false, force = false } = options;
 
   if (state.summaryInline) {
+    if (!silent) {
+      state.summaryLoading = false;
+      state.summaryError = null;
+      renderDetail();
+    }
+    return;
+  }
+
+  if (!run?.run_id) {
+    return;
+  }
+
+  if (!force && state.summaryCache.has(run.run_id)) {
     if (!silent) {
       state.summaryLoading = false;
       state.summaryError = null;
@@ -1822,7 +1928,7 @@ async function loadIndexFromFetch(path, updateUrl) {
     renderAll();
     if (state.selectedRunId) {
       const run = getFilteredRuns().find((item) => item.run_id === state.selectedRunId);
-      if (run) {
+      if (run && !state.summaryInline && !state.summaryCache.has(run.run_id)) {
         loadSummary(run);
       }
     }
@@ -1846,7 +1952,8 @@ async function prefetchSummaries(runs) {
   await Promise.all(
     targets.map((run) =>
       fetchSummary(run, {
-        silent: true
+        silent: true,
+        force: true
       })
     )
   );
@@ -1896,7 +2003,7 @@ async function refreshIndex() {
 
     if (state.selectedRunId) {
       const run = getRuns().find((item) => item.run_id === state.selectedRunId);
-      if (run) {
+      if (run && !state.summaryInline && !state.summaryCache.has(run.run_id)) {
         loadSummary(run);
       }
     }
