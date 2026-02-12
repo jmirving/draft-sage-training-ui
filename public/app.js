@@ -353,6 +353,18 @@ function titleCase(value) {
     .join(" ");
 }
 
+function compactPath(value, maxLength = 62) {
+  const text = String(value || "");
+  if (!text) {
+    return "—";
+  }
+  if (text.length <= maxLength) {
+    return text;
+  }
+  const keep = Math.max(8, Math.floor((maxLength - 3) / 2));
+  return `${text.slice(0, keep)}...${text.slice(-keep)}`;
+}
+
 function formatConfigValue(value, format) {
   if (value === undefined || value === null || value === "") {
     return "—";
@@ -840,9 +852,13 @@ function renderDecisionCards() {
   const running = runs.filter((run) => run?.status === "running");
   elements.runningCount.textContent = running.length.toString();
   elements.runningNow.innerHTML = "";
+  const runningCard = elements.runningNow.closest(".decision-card");
+  if (runningCard) {
+    runningCard.classList.toggle("is-empty", running.length === 0);
+  }
   if (running.length === 0) {
     elements.runningNow.innerHTML =
-      '<div class="decision-item"><span class="decision-title">No active runs</span><span class="decision-meta">Queue is clear.</span></div>';
+      '<div class="decision-item decision-item-inline"><span class="decision-title">Queue clear</span></div>';
   } else {
     running.slice(0, 3).forEach((run) => {
       elements.runningNow.appendChild(renderDecisionItem(run, true));
@@ -1622,7 +1638,12 @@ function renderDetail() {
 
   const description = document.createElement("p");
   description.className = "description";
-  description.textContent = summary?.description || "No description yet.";
+  const descriptionText = summary?.description || "";
+  const hasDescription =
+    descriptionText &&
+    descriptionText !== "Legacy training run summary." &&
+    descriptionText !== "No description yet.";
+  description.textContent = hasDescription ? descriptionText : "Run summary";
 
   const detailGrid = document.createElement("div");
   detailGrid.className = "detail-grid";
@@ -1707,7 +1728,9 @@ function renderDetail() {
   artifacts.appendChild(linkGrid);
 
   elements.detailBody.appendChild(header);
-  elements.detailBody.appendChild(description);
+  if (hasDescription) {
+    elements.detailBody.appendChild(description);
+  }
   elements.detailBody.appendChild(detailGrid);
   elements.detailBody.appendChild(metrics);
   elements.detailBody.appendChild(comparison);
@@ -2467,11 +2490,14 @@ function updateMetricAvailability(runs) {
 
 function setIndexMeta(indexPath) {
   const sources = state.indexSources || [];
+  const rawPath =
+    sources.length > 1 ? `Auto (${sources.length} sources)` : indexPath || sources[0] || "—";
   if (sources.length > 1) {
-    elements.indexPath.textContent = `Auto (${sources.length} sources)`;
+    elements.indexPath.textContent = rawPath;
   } else {
-    elements.indexPath.textContent = indexPath || sources[0] || "—";
+    elements.indexPath.textContent = compactPath(rawPath);
   }
+  elements.indexPath.title = rawPath;
   elements.indexUpdated.textContent = formatDate(state.indexData?.generated_at);
   elements.indexRefreshed.textContent = formatDate(state.lastRefresh);
 }
