@@ -676,19 +676,56 @@ function getGroupKey(run) {
   return run?.group_id || run?.category || "uncategorized";
 }
 
+function humanizeIdentifier(value) {
+  const text = String(value || "").trim();
+  if (!text) {
+    return "—";
+  }
+  const withoutPrefix = text.replace(/^exp[-_]/i, "");
+  const normalized = withoutPrefix.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return text;
+  }
+  return titleCase(normalized);
+}
+
 function getGroupLabelByKey(key) {
   if (!key) {
     return "Uncategorized";
   }
-  return state.groupLabels.get(key) || GROUP_LABELS[key] || titleCase(key);
+  return state.groupLabels.get(key) || GROUP_LABELS[key] || humanizeIdentifier(key);
 }
 
 function getGroupLabel(run) {
   return getGroupLabelByKey(getGroupKey(run));
 }
 
-function getVariantLabel(run) {
+function getVariantRawLabel(run) {
   return run?.variant_label || run?.display_name || run?.run_id || "—";
+}
+
+function getVariantLabel(run) {
+  const raw = getVariantRawLabel(run);
+  if (!raw || raw === "—") {
+    return "—";
+  }
+  const humanized = humanizeIdentifier(raw);
+  const groupLabel = getGroupLabel(run).toLowerCase();
+  const groupHumanized = humanizeIdentifier(getGroupKey(run)).toLowerCase();
+
+  const variants = [groupLabel, groupHumanized].filter(Boolean);
+  let cleaned = humanized;
+  variants.forEach((prefix) => {
+    const lower = cleaned.toLowerCase();
+    if (!prefix || lower === prefix) {
+      return;
+    }
+    const matchPrefix = `${prefix} `;
+    if (lower.startsWith(matchPrefix)) {
+      cleaned = cleaned.slice(matchPrefix.length).trim();
+    }
+  });
+  return cleaned || humanized;
 }
 
 function getMetricValue(run) {
@@ -903,6 +940,7 @@ function renderDecisionCards() {
     const title = document.createElement("span");
     title.className = "decision-title";
     title.textContent = `${label}: ${getVariantLabel(bestChallenger)}`;
+    title.title = getVariantRawLabel(bestChallenger);
 
     const meta = document.createElement("span");
     meta.className = "decision-meta";
@@ -927,7 +965,8 @@ function renderDecisionItem(run, includeProgress, showDataset) {
 
   const title = document.createElement("span");
   title.className = "decision-title";
-  title.textContent = run?.display_name || run?.run_id || "Untitled run";
+  title.textContent = getVariantLabel(run);
+  title.title = getVariantRawLabel(run);
 
   const meta = document.createElement("span");
   meta.className = "decision-meta";
@@ -1030,13 +1069,18 @@ function renderComparisonTable() {
     groupName.textContent = group.label;
     const groupMeta = document.createElement("span");
     groupMeta.className = "group-cell-meta";
-    groupMeta.textContent = group.key;
+    groupMeta.textContent = `${group.runCount} runs`;
     groupCell.appendChild(groupName);
     groupCell.appendChild(groupMeta);
     row.appendChild(groupCell);
 
     row.appendChild(createCell(String(group.runCount)));
-    row.appendChild(createCell(group.best ? getVariantLabel(group.best) : "—"));
+    row.appendChild(
+      createPrimarySecondaryCell(
+        group.best ? getVariantLabel(group.best) : "—",
+        group.best?.run_id || ""
+      )
+    );
     row.appendChild(
       createCell(group.metricValue !== null ? formatNumber(group.metricValue) : "—")
     );
@@ -1205,7 +1249,17 @@ function renderGroupDetailsRow(group, columnCount) {
 
     const variantCell = document.createElement("td");
     variantCell.className = "group-run-variant";
-    variantCell.textContent = getVariantLabel(run);
+    const variantPrimary = document.createElement("span");
+    variantPrimary.className = "table-primary";
+    variantPrimary.textContent = getVariantLabel(run);
+    variantPrimary.title = getVariantRawLabel(run);
+    const variantSecondary = document.createElement("span");
+    variantSecondary.className = "table-secondary";
+    variantSecondary.textContent = run.run_id || "";
+    variantCell.appendChild(variantPrimary);
+    if (run.run_id) {
+      variantCell.appendChild(variantSecondary);
+    }
     tr.appendChild(variantCell);
 
     tr.appendChild(createCell(entry.metricValue !== null ? formatNumber(entry.metricValue) : "—"));
@@ -2743,6 +2797,27 @@ function clearCompareRuns() {
 function createCell(value) {
   const cell = document.createElement("td");
   cell.textContent = value;
+  return cell;
+}
+
+function createPrimarySecondaryCell(primary, secondary) {
+  const cell = document.createElement("td");
+  cell.className = "primary-secondary-cell";
+
+  const primaryEl = document.createElement("span");
+  primaryEl.className = "table-primary";
+  primaryEl.textContent = primary;
+  primaryEl.title = primary;
+
+  const secondaryEl = document.createElement("span");
+  secondaryEl.className = "table-secondary";
+  secondaryEl.textContent = secondary || "";
+  secondaryEl.title = secondary || "";
+
+  cell.appendChild(primaryEl);
+  if (secondary) {
+    cell.appendChild(secondaryEl);
+  }
   return cell;
 }
 

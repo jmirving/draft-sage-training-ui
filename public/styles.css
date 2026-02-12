@@ -500,6 +500,26 @@ button {
   gap: 2px;
 }
 
+.comparison td.primary-secondary-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.table-primary {
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.table-secondary {
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .group-cell-name {
   font-weight: 600;
 }
@@ -576,7 +596,8 @@ button {
 }
 
 .group-run-table td.group-run-variant {
-  font-weight: 600;
+  display: grid;
+  gap: 2px;
 }
 
 .group-run-actions {
