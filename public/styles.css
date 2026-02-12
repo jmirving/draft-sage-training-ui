@@ -147,6 +147,10 @@ button {
   gap: 12px;
 }
 
+.decision-card.is-empty {
+  opacity: 0.92;
+}
+
 .decision-card .panel-header {
   margin-bottom: 8px;
 }
@@ -489,6 +493,108 @@ button {
 
 .comparison tbody tr.active {
   background: rgba(217, 108, 61, 0.12);
+}
+
+.comparison td.group-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.group-cell-name {
+  font-weight: 600;
+}
+
+.group-cell-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.group-detail-toggle {
+  border: 1px solid rgba(25, 24, 23, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+}
+
+.group-details-row {
+  cursor: default;
+}
+
+.group-details-row:hover {
+  background: transparent !important;
+}
+
+.group-details-cell {
+  padding: 0 8px 12px !important;
+  border-bottom: 1px solid rgba(25, 24, 23, 0.08);
+}
+
+.group-details-wrap {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(25, 24, 23, 0.1);
+  border-radius: 10px;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.group-details-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.group-run-table-wrap {
+  overflow-x: auto;
+}
+
+.group-run-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.group-run-table th,
+.group-run-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid rgba(25, 24, 23, 0.08);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.group-run-table thead th {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.group-run-table td.group-run-variant {
+  font-weight: 600;
+}
+
+.group-run-actions {
+  white-space: nowrap;
+}
+
+.group-run-open,
+.group-run-compare {
+  border: 1px solid rgba(25, 24, 23, 0.16);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.group-run-compare {
+  margin-left: 6px;
 }
 
 .status-badge {

@@ -199,6 +199,7 @@ const state = {
   groupLabels: new Map(),
   indexSources: [],
   compareRunIds: [],
+  expandedGroupKeys: new Set(),
   perSlotExpandedRunIds: new Set(),
   tableSort: {
     key: "metric",
@@ -951,7 +952,8 @@ function renderComparisonTable() {
   elements.comparisonBody.innerHTML = "";
   renderComparisonSortHeaders();
   const runs = getFilteredRuns();
-  elements.tableCount.textContent = `${new Set(runs.map(getGroupKey)).size} groups`;
+  const groupCount = new Set(runs.map(getGroupKey)).size;
+  elements.tableCount.textContent = `${groupCount} groups · ${runs.length} runs`;
 
   if (state.indexLoading) {
     setTableState("Loading experiment index…");
@@ -977,6 +979,7 @@ function renderComparisonTable() {
 
   const baselineToBeat = getBaselineToBeatRun();
   const baselineMetric = baselineToBeat ? getMetricValue(baselineToBeat) : null;
+  const columnCount = 8;
   const groups = Array.from(buildGroupStats(runs).values()).map((group, index) => {
     const metricValue = group.best ? getMetricValue(group.best) : null;
     const delta = computeDelta(metricValue, baselineMetric);
@@ -984,6 +987,7 @@ function renderComparisonTable() {
     const updatedTs = updatedRaw ? new Date(updatedRaw).getTime() : Number.NEGATIVE_INFINITY;
     return {
       ...group,
+      runCount: group.runs.length,
       metricValue,
       delta,
       updatedRaw,
@@ -996,6 +1000,7 @@ function renderComparisonTable() {
 
   groups.forEach((group) => {
     const row = document.createElement("tr");
+    row.classList.toggle("expanded", state.expandedGroupKeys.has(group.key));
     if (group.best?.run_id === state.selectedRunId) {
       row.classList.add("active");
     }
@@ -1018,7 +1023,19 @@ function renderComparisonTable() {
             ? "negative"
             : "neutral";
 
-    row.appendChild(createCell(group.label));
+    const groupCell = document.createElement("td");
+    groupCell.className = "group-cell";
+    const groupName = document.createElement("span");
+    groupName.className = "group-cell-name";
+    groupName.textContent = group.label;
+    const groupMeta = document.createElement("span");
+    groupMeta.className = "group-cell-meta";
+    groupMeta.textContent = group.key;
+    groupCell.appendChild(groupName);
+    groupCell.appendChild(groupMeta);
+    row.appendChild(groupCell);
+
+    row.appendChild(createCell(String(group.runCount)));
     row.appendChild(createCell(group.best ? getVariantLabel(group.best) : "—"));
     row.appendChild(
       createCell(group.metricValue !== null ? formatNumber(group.metricValue) : "—")
@@ -1033,8 +1050,28 @@ function renderComparisonTable() {
 
     row.appendChild(createCell(group.statusLabel));
     row.appendChild(createCell(formatDate(group.updatedRaw)));
+    const detailsCell = document.createElement("td");
+    const detailsButton = document.createElement("button");
+    detailsButton.type = "button";
+    detailsButton.className = "group-detail-toggle";
+    const expanded = state.expandedGroupKeys.has(group.key);
+    detailsButton.textContent = expanded ? "Hide runs" : "View runs";
+    detailsButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (state.expandedGroupKeys.has(group.key)) {
+        state.expandedGroupKeys.delete(group.key);
+      } else {
+        state.expandedGroupKeys.add(group.key);
+      }
+      renderComparisonTable();
+    });
+    detailsCell.appendChild(detailsButton);
+    row.appendChild(detailsCell);
 
     elements.comparisonBody.appendChild(row);
+    if (expanded) {
+      elements.comparisonBody.appendChild(renderGroupDetailsRow(group, columnCount));
+    }
   });
 }
 
@@ -1072,6 +1109,9 @@ function compareComparisonRows(a, b) {
         b.best ? getVariantLabel(b.best) : ""
       );
       break;
+    case "runs":
+      base = compareNullableNumbers(a.runCount, b.runCount, direction);
+      break;
     case "metric":
       base = compareNullableNumbers(a.metricValue, b.metricValue, direction);
       break;
@@ -1095,6 +1135,118 @@ function compareComparisonRows(a, b) {
     return a.index - b.index;
   }
   return base;
+}
+
+function renderGroupDetailsRow(group, columnCount) {
+  const detailRow = document.createElement("tr");
+  detailRow.className = "group-details-row";
+
+  const detailCell = document.createElement("td");
+  detailCell.className = "group-details-cell";
+  detailCell.colSpan = columnCount;
+
+  const wrap = document.createElement("div");
+  wrap.className = "group-details-wrap";
+
+  const title = document.createElement("p");
+  title.className = "group-details-title";
+  title.textContent = `${group.label}: ${group.runCount} runs`;
+  wrap.appendChild(title);
+
+  const tableWrap = document.createElement("div");
+  tableWrap.className = "group-run-table-wrap";
+  const table = document.createElement("table");
+  table.className = "group-run-table";
+
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  ["Variant", "Metric", "Status", "Updated", "Actions"].forEach((label) => {
+    const th = document.createElement("th");
+    th.textContent = label;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  const sortedRuns = group.runs
+    .slice()
+    .map((run, index) => {
+      const metricValue = getMetricValue(run);
+      const updatedRaw = getRunUpdatedAt(run);
+      const updatedTs = updatedRaw ? new Date(updatedRaw).getTime() : Number.NEGATIVE_INFINITY;
+      return {
+        run,
+        index,
+        metricValue,
+        updatedRaw,
+        updatedTs: Number.isNaN(updatedTs) ? Number.NEGATIVE_INFINITY : updatedTs
+      };
+    })
+    .sort((left, right) => {
+      const metricCompare = compareNullableNumbers(
+        left.metricValue,
+        right.metricValue,
+        "desc"
+      );
+      if (metricCompare !== 0) {
+        return metricCompare;
+      }
+      const updatedCompare = compareNullableNumbers(left.updatedTs, right.updatedTs, "desc");
+      if (updatedCompare !== 0) {
+        return updatedCompare;
+      }
+      return left.index - right.index;
+    });
+
+  sortedRuns.forEach((entry) => {
+    const run = entry.run;
+    const tr = document.createElement("tr");
+
+    const variantCell = document.createElement("td");
+    variantCell.className = "group-run-variant";
+    variantCell.textContent = getVariantLabel(run);
+    tr.appendChild(variantCell);
+
+    tr.appendChild(createCell(entry.metricValue !== null ? formatNumber(entry.metricValue) : "—"));
+    tr.appendChild(createCell(STATUS_LABELS[run.status] || run.status || "—"));
+    tr.appendChild(createCell(formatDate(entry.updatedRaw)));
+
+    const actionsCell = document.createElement("td");
+    actionsCell.className = "group-run-actions";
+
+    const openButton = document.createElement("button");
+    openButton.type = "button";
+    openButton.className = "group-run-open";
+    openButton.textContent = "Open";
+    openButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectRun(run.run_id);
+    });
+
+    const compareButton = document.createElement("button");
+    compareButton.type = "button";
+    compareButton.className = "group-run-compare";
+    compareButton.textContent = "Add compare";
+    compareButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      addCompareRun(run.run_id);
+      renderAll();
+    });
+
+    actionsCell.appendChild(openButton);
+    actionsCell.appendChild(compareButton);
+    tr.appendChild(actionsCell);
+
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  tableWrap.appendChild(table);
+  wrap.appendChild(tableWrap);
+  detailCell.appendChild(wrap);
+  detailRow.appendChild(detailCell);
+  return detailRow;
 }
 
 function renderComparisonSortHeaders() {
@@ -2407,12 +2559,19 @@ function renderFilters() {
     STATUS_ORDER
   );
   const groupOptions = buildGroupOptions(runs);
+  const groupCounts = new Map();
+  runs.forEach((run) => {
+    const key = getGroupKey(run);
+    groupCounts.set(key, (groupCounts.get(key) || 0) + 1);
+  });
 
   populateSelect(elements.statusFilter, statusOptions, (option) =>
     option === "all" ? "All statuses" : STATUS_LABELS[option] || option
   );
   populateSelect(elements.groupFilter, groupOptions, (option) =>
-    option === "all" ? "All groups" : getGroupLabelByKey(option)
+    option === "all"
+      ? `All groups (${runs.length} runs)`
+      : `${getGroupLabelByKey(option)} (${groupCounts.get(option) || 0})`
   );
 
   if (!statusOptions.includes(state.statusFilter)) {
@@ -2835,6 +2994,16 @@ function applyIndexResult(result, options = {}) {
       .map((run) => run?.run_id)
       .filter(Boolean)
   );
+  const groupKeys = new Set(
+    (Array.isArray(result.indexData?.runs) ? result.indexData.runs : [])
+      .map((run) => getGroupKey(run))
+      .filter(Boolean)
+  );
+  state.expandedGroupKeys.forEach((key) => {
+    if (!groupKeys.has(key)) {
+      state.expandedGroupKeys.delete(key);
+    }
+  });
   state.compareRunIds = state.compareRunIds.filter((runId) => runIds.has(runId));
   state.summaryCache.forEach((_, runId) => {
     if (!runIds.has(runId)) {
