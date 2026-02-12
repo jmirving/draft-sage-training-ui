@@ -221,6 +221,7 @@ const elements = {
   nextDecision: document.getElementById("next-decision"),
   tableCount: document.getElementById("table-count"),
   tableState: document.getElementById("table-state"),
+  groupSpread: document.getElementById("group-spread"),
   comparisonBody: document.getElementById("comparison-body"),
   comparisonHeaders: Array.from(
     document.querySelectorAll("#comparison-table thead th[data-sort]")
@@ -237,10 +238,7 @@ const elements = {
   compareKnobBody: document.getElementById("compare-knob-body"),
   detailState: document.getElementById("detail-state"),
   detailBody: document.getElementById("detail-body"),
-  detailStatus: document.getElementById("detail-status"),
-  ledgerCount: document.getElementById("ledger-count"),
-  ledgerState: document.getElementById("ledger-state"),
-  ledgerList: document.getElementById("ledger-list")
+  detailStatus: document.getElementById("detail-status")
 };
 
 function formatDate(value) {
@@ -851,6 +849,38 @@ function buildGroupStats(runs) {
   return groups;
 }
 
+function buildComparisonRows(runs) {
+  const baselineToBeat = getBaselineToBeatRun();
+  const baselineMetric = baselineToBeat ? getMetricValue(baselineToBeat) : null;
+  return Array.from(buildGroupStats(runs).values()).map((group, index) => {
+    const metricSamples = group.runs
+      .map((run) => getMetricValue(run))
+      .filter((value) => typeof value === "number" && !Number.isNaN(value));
+    const metricMin = metricSamples.length > 0 ? Math.min(...metricSamples) : null;
+    const metricMax = metricSamples.length > 0 ? Math.max(...metricSamples) : null;
+    const metricSpread =
+      metricMin !== null && metricMax !== null ? metricMax - metricMin : null;
+    const metricValue = group.best ? getMetricValue(group.best) : null;
+    const delta = computeDelta(metricValue, baselineMetric);
+    const updatedRaw = getRunUpdatedAt(group.best);
+    const updatedTs = updatedRaw ? new Date(updatedRaw).getTime() : Number.NEGATIVE_INFINITY;
+
+    return {
+      ...group,
+      runCount: group.runs.length,
+      metricValue,
+      delta,
+      updatedRaw,
+      updatedTs: Number.isNaN(updatedTs) ? Number.NEGATIVE_INFINITY : updatedTs,
+      statusLabel: STATUS_LABELS[group.best?.status] || group.best?.status || "—",
+      metricMin,
+      metricMax,
+      metricSpread,
+      index
+    };
+  });
+}
+
 function findRunById(runId) {
   return getRuns().find((run) => run?.run_id === runId) || null;
 }
@@ -993,6 +1023,7 @@ function renderComparisonTable() {
   const runs = getFilteredRuns();
   const groupCount = new Set(runs.map(getGroupKey)).size;
   elements.tableCount.textContent = `${groupCount} groups · ${runs.length} runs`;
+  renderGroupSpread([]);
 
   if (state.indexLoading) {
     setTableState("Loading experiment index…");
@@ -1016,25 +1047,9 @@ function renderComparisonTable() {
 
   clearTableState();
 
-  const baselineToBeat = getBaselineToBeatRun();
-  const baselineMetric = baselineToBeat ? getMetricValue(baselineToBeat) : null;
   const columnCount = 8;
-  const groups = Array.from(buildGroupStats(runs).values()).map((group, index) => {
-    const metricValue = group.best ? getMetricValue(group.best) : null;
-    const delta = computeDelta(metricValue, baselineMetric);
-    const updatedRaw = getRunUpdatedAt(group.best);
-    const updatedTs = updatedRaw ? new Date(updatedRaw).getTime() : Number.NEGATIVE_INFINITY;
-    return {
-      ...group,
-      runCount: group.runs.length,
-      metricValue,
-      delta,
-      updatedRaw,
-      updatedTs: Number.isNaN(updatedTs) ? Number.NEGATIVE_INFINITY : updatedTs,
-      statusLabel: STATUS_LABELS[group.best?.status] || group.best?.status || "—",
-      index
-    };
-  });
+  const groups = buildComparisonRows(runs);
+  renderGroupSpread(groups);
   groups.sort(compareComparisonRows);
 
   groups.forEach((group) => {
@@ -1117,6 +1132,101 @@ function renderComparisonTable() {
       elements.comparisonBody.appendChild(renderGroupDetailsRow(group, columnCount));
     }
   });
+}
+
+function renderGroupSpread(groups) {
+  if (!elements.groupSpread) {
+    return;
+  }
+  elements.groupSpread.innerHTML = "";
+
+  const rows = Array.isArray(groups)
+    ? groups.filter(
+        (group) =>
+          typeof group.metricMin === "number" &&
+          !Number.isNaN(group.metricMin) &&
+          typeof group.metricMax === "number" &&
+          !Number.isNaN(group.metricMax)
+      )
+    : [];
+
+  if (rows.length === 0) {
+    elements.groupSpread.style.display = "none";
+    return;
+  }
+
+  const sortedRows = rows
+    .slice()
+    .sort((left, right) => compareNullableNumbers(left.metricValue, right.metricValue, "desc"));
+  const displayRows = sortedRows.slice(0, 8);
+
+  const domainMin = Math.min(...displayRows.map((group) => group.metricMin));
+  const domainMax = Math.max(...displayRows.map((group) => group.metricMax));
+  const domainSpan = Math.max(domainMax - domainMin, 1e-9);
+
+  const header = document.createElement("p");
+  header.className = "group-spread-title";
+  header.textContent = "Group performance spread (best to worst)";
+  elements.groupSpread.appendChild(header);
+
+  displayRows.forEach((group) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "group-spread-row";
+    if (group.best?.run_id === state.selectedRunId) {
+      row.classList.add("active");
+    }
+    row.addEventListener("click", () => {
+      if (group.best?.run_id) {
+        selectRun(group.best.run_id);
+      }
+    });
+
+    const label = document.createElement("span");
+    label.className = "group-spread-label";
+    label.textContent = `${group.label} (${group.runCount})`;
+    row.appendChild(label);
+
+    const track = document.createElement("span");
+    track.className = "group-spread-track";
+
+    const range = document.createElement("span");
+    range.className = "group-spread-range";
+    const startPct = ((group.metricMin - domainMin) / domainSpan) * 100;
+    const widthPct = ((group.metricMax - group.metricMin) / domainSpan) * 100;
+    const clampedStart = Math.max(0, Math.min(98, startPct));
+    const clampedWidth = Math.max(2, Math.min(widthPct, 100 - clampedStart));
+    range.style.left = `${clampedStart}%`;
+    range.style.width = `${clampedWidth}%`;
+    track.appendChild(range);
+
+    const best = document.createElement("span");
+    best.className = "group-spread-best";
+    const bestMetric =
+      typeof group.metricValue === "number" && !Number.isNaN(group.metricValue)
+        ? group.metricValue
+        : group.metricMax;
+    const bestPct = ((bestMetric - domainMin) / domainSpan) * 100;
+    best.style.left = `${Math.max(0, Math.min(100, bestPct))}%`;
+    track.appendChild(best);
+    row.appendChild(track);
+
+    const value = document.createElement("span");
+    value.className = "group-spread-value";
+    value.textContent = formatNumber(group.metricValue);
+    row.appendChild(value);
+
+    elements.groupSpread.appendChild(row);
+  });
+
+  if (sortedRows.length > displayRows.length) {
+    const footer = document.createElement("p");
+    footer.className = "group-spread-footnote";
+    footer.textContent = `Showing top ${displayRows.length} of ${sortedRows.length} groups.`;
+    elements.groupSpread.appendChild(footer);
+  }
+
+  elements.groupSpread.style.display = "grid";
 }
 
 function compareNullableNumbers(a, b, direction = "asc") {
@@ -1692,97 +1802,6 @@ function renderComparisonWorkspace() {
     tr.appendChild(td);
     elements.compareKnobBody.appendChild(tr);
   }
-}
-
-function renderLedger() {
-  elements.ledgerList.innerHTML = "";
-  const runs = getFilteredRuns();
-  elements.ledgerCount.textContent = `${runs.length} total`;
-
-  if (state.indexLoading) {
-    setLedgerState("Loading experiment index…");
-    return;
-  }
-
-  if (state.indexError) {
-    setLedgerState(`Unable to load index: ${state.indexError}`, "error");
-    return;
-  }
-
-  if (!state.indexData) {
-    setLedgerState("Load an index to get started.");
-    return;
-  }
-
-  if (runs.length === 0) {
-    setLedgerState("No runs match the current filters.", "empty");
-    return;
-  }
-
-  clearLedgerState();
-
-  const ordered = runs
-    .map((run, index) => ({ run, index }))
-    .sort((a, b) => getRunSortTimestamp(b.run, b.index) - getRunSortTimestamp(a.run, a.index));
-
-  ordered.forEach((entry, index) => {
-    const run = entry.run;
-    const item = document.createElement("div");
-    item.className = "ledger-item";
-    if (index === ordered.length - 1) {
-      item.classList.add("is-last");
-    }
-
-    const marker = document.createElement("div");
-    marker.className = "ledger-marker";
-    const dot = document.createElement("div");
-    dot.className = "ledger-dot";
-    marker.appendChild(dot);
-
-    const card = document.createElement("div");
-    card.className = "ledger-card";
-    if (run.run_id === state.selectedRunId) {
-      card.classList.add("active");
-    }
-
-    const title = document.createElement("p");
-    title.className = "ledger-title";
-    title.textContent = run.display_name || run.run_id || "Untitled run";
-
-    const meta = document.createElement("div");
-    meta.className = "ledger-meta";
-    const metric = getMetricValue(run);
-    const metricLabel = metric !== null ? formatNumber(metric) : "—";
-    const metricSpan = document.createElement("span");
-    metricSpan.className = "ledger-metric";
-    metricSpan.textContent = `${getMetricLabel()}: ${metricLabel}`;
-
-    const groupSpan = document.createElement("span");
-    groupSpan.textContent = getGroupLabel(run);
-
-    const variantSpan = document.createElement("span");
-    variantSpan.textContent = getVariantLabel(run);
-
-    const statusSpan = document.createElement("span");
-    statusSpan.textContent = STATUS_LABELS[run.status] || run.status || "—";
-
-    const updatedSpan = document.createElement("span");
-    updatedSpan.textContent = formatDate(getRunUpdatedAt(run));
-
-    meta.appendChild(metricSpan);
-    meta.appendChild(groupSpan);
-    meta.appendChild(variantSpan);
-    meta.appendChild(statusSpan);
-    meta.appendChild(updatedSpan);
-
-    card.appendChild(title);
-    card.appendChild(meta);
-    card.addEventListener("click", () => selectRun(run.run_id));
-
-    item.appendChild(marker);
-    item.appendChild(card);
-    elements.ledgerList.appendChild(item);
-  });
 }
 
 function renderDetail() {
@@ -2725,16 +2744,6 @@ function clearTableState() {
   elements.tableState.style.display = "none";
 }
 
-function setLedgerState(message, type) {
-  elements.ledgerState.textContent = message;
-  elements.ledgerState.className = `state${type ? ` ${type}` : ""}`;
-  elements.ledgerState.style.display = "block";
-}
-
-function clearLedgerState() {
-  elements.ledgerState.style.display = "none";
-}
-
 function setDetailState(message, type) {
   elements.detailState.textContent = message;
   elements.detailState.className = `state${type ? ` ${type}` : ""}`;
@@ -2849,7 +2858,6 @@ function renderAll() {
   renderDecisionCards();
   renderComparisonTable();
   renderComparisonWorkspace();
-  renderLedger();
   renderDetail();
 }
 
