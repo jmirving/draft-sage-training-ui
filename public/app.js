@@ -296,7 +296,10 @@ function normalizePerSlotMetrics(summary) {
           typeof row?.slot_id === "string" && row.slot_id.length > 0
             ? row.slot_id
             : `slot_${slot.toString().padStart(2, "0")}`,
-        canonicalSide: row?.canonical?.side || null,
+        canonicalTeam:
+          typeof row?.canonical?.team === "string"
+            ? row.canonical.team.toLowerCase()
+            : null,
         canonicalType: row?.canonical?.type || null,
         canonicalNum:
           typeof row?.canonical?.num === "number" && row.canonical.num > 0
@@ -313,14 +316,14 @@ function normalizePerSlotMetrics(summary) {
 }
 
 function formatTeamSlotLabel(row) {
-  const side = row?.canonicalSide;
+  const team = row?.canonicalTeam;
   const type = row?.canonicalType;
   const num = row?.canonicalNum;
-  if (!side && !type && !num) {
+  if (!team && !type && !num) {
     return `Slot ${row?.slot ?? "?"}`;
   }
   const teamLabel =
-    side === "blue" ? "Team 1" : side === "red" ? "Team 2" : "Team ?";
+    team === "team_1" ? "Team 1" : team === "team_2" ? "Team 2" : "Team ?";
   const typeLabel = type ? titleCase(String(type)) : "Action";
   const numLabel = typeof num === "number" ? ` ${num}` : "";
   return `${teamLabel} ${typeLabel}${numLabel}`.trim();
