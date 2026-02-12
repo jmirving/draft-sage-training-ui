@@ -122,6 +122,38 @@
         </section>
       </main>
 
+      <section class="panel compare-workspace">
+        <div class="panel-header">
+          <h2>Comparison workspace</h2>
+          <span id="compare-count" class="pill">0/6 selected</span>
+        </div>
+        <div class="compare-controls">
+          <div class="compare-picker">
+            <label for="compare-run-picker">Add run</label>
+            <select id="compare-run-picker"></select>
+            <button id="compare-add-picker" type="button">Add</button>
+          </div>
+          <div class="compare-actions">
+            <button id="compare-add-selected" type="button">Add selected run</button>
+            <button id="compare-clear" type="button" class="ghost">Clear</button>
+          </div>
+        </div>
+        <div id="compare-state" class="state">Select 2–6 runs to compare.</div>
+        <div id="compare-selected" class="compare-selected"></div>
+        <div id="compare-matrix" class="compare-matrix"></div>
+        <div class="compare-knob-wrap">
+          <h3>Config variables</h3>
+          <div class="table-wrap">
+            <table id="compare-knob-table" class="compare-knob-table">
+              <thead>
+                <tr id="compare-knob-head"></tr>
+              </thead>
+              <tbody id="compare-knob-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <section class="panel ledger">
         <div class="panel-header">
           <h2>Experiment ledger</h2>

@@ -164,6 +164,7 @@ const CONFIG_DIFF_IGNORED_KEYS = new Set([
   "series_priors_strength",
   "champion_priors_time_buckets"
 ]);
+const MAX_COMPARE_RUNS = 6;
 
 const state = {
   indexData: null,
@@ -197,6 +198,7 @@ const state = {
   indexRefreshing: false,
   groupLabels: new Map(),
   indexSources: [],
+  compareRunIds: [],
   perSlotExpandedRunIds: new Set(),
   tableSort: {
     key: "metric",
@@ -222,6 +224,16 @@ const elements = {
   comparisonHeaders: Array.from(
     document.querySelectorAll("#comparison-table thead th[data-sort]")
   ),
+  compareCount: document.getElementById("compare-count"),
+  compareState: document.getElementById("compare-state"),
+  compareRunPicker: document.getElementById("compare-run-picker"),
+  compareAddPicker: document.getElementById("compare-add-picker"),
+  compareAddSelected: document.getElementById("compare-add-selected"),
+  compareClear: document.getElementById("compare-clear"),
+  compareSelected: document.getElementById("compare-selected"),
+  compareMatrix: document.getElementById("compare-matrix"),
+  compareKnobHead: document.getElementById("compare-knob-head"),
+  compareKnobBody: document.getElementById("compare-knob-body"),
   detailState: document.getElementById("detail-state"),
   detailBody: document.getElementById("detail-body"),
   detailStatus: document.getElementById("detail-status"),
@@ -448,7 +460,7 @@ function ensureSummaryEntry(run) {
       silent: true
     }).finally(() => {
       state.summaryBackgroundLoading.delete(run.run_id);
-      renderDetail();
+      renderAll();
     });
   }
   return null;
@@ -971,7 +983,16 @@ function renderComparisonTable() {
     if (group.best?.run_id === state.selectedRunId) {
       row.classList.add("active");
     }
-    row.addEventListener("click", () => selectRun(group.best?.run_id));
+    row.addEventListener("click", (event) => {
+      const runId = group.best?.run_id;
+      if (!runId) {
+        return;
+      }
+      if (event.shiftKey || event.metaKey || event.ctrlKey) {
+        addCompareRun(runId);
+      }
+      selectRun(runId);
+    });
     const deltaClass =
       group.delta === null
         ? "neutral"
@@ -1070,6 +1091,385 @@ function renderComparisonSortHeaders() {
     header.classList.toggle("active-sort", active);
     header.classList.add("sortable-header");
   });
+}
+
+function createCompareMatrixMetric(label, value, tone = "neutral") {
+  const row = document.createElement("div");
+  row.className = "compare-matrix-metric";
+
+  const name = document.createElement("span");
+  name.className = "compare-matrix-metric-label";
+  name.textContent = label;
+
+  const metricValue = document.createElement("span");
+  metricValue.className = `compare-matrix-metric-value ${tone}`;
+  metricValue.textContent = value;
+
+  row.appendChild(name);
+  row.appendChild(metricValue);
+  return row;
+}
+
+function compareAllValuesEqual(values) {
+  if (!Array.isArray(values) || values.length <= 1) {
+    return true;
+  }
+  const first = values[0];
+  return values.every((value) => configValuesEqual(value, first));
+}
+
+function buildWorkspaceKnobRows(compareRuns, configByRunId) {
+  const rows = [];
+  const usedKeys = new Set();
+
+  CONFIG_DIFF_REGISTRY.forEach((spec) => {
+    const values = compareRuns.map((run) => readConfigKey(configByRunId.get(run.run_id), spec));
+    if (values.every((value) => value === undefined)) {
+      return;
+    }
+    usedKeys.add(spec.key);
+    if (spec.inverseKey) {
+      usedKeys.add(spec.inverseKey);
+    }
+    if (compareAllValuesEqual(values)) {
+      return;
+    }
+    rows.push({
+      key: spec.key,
+      label: spec.label,
+      group: spec.group || "Other",
+      values,
+      format: spec.format || null,
+      isUnknown: false
+    });
+  });
+
+  const candidateKeys = new Set();
+  compareRuns.forEach((run) => {
+    const config = configByRunId.get(run.run_id) || {};
+    Object.keys(config).forEach((key) => candidateKeys.add(key));
+  });
+  candidateKeys.forEach((key) => {
+    if (usedKeys.has(key) || CONFIG_DIFF_IGNORED_KEYS.has(key)) {
+      return;
+    }
+    const values = compareRuns.map((run) => {
+      const config = configByRunId.get(run.run_id) || {};
+      return Object.prototype.hasOwnProperty.call(config, key) ? config[key] : undefined;
+    });
+    if (compareAllValuesEqual(values)) {
+      return;
+    }
+    rows.push({
+      key,
+      label: `${titleCase(key)} (${key})`,
+      group: "Other",
+      values,
+      format: null,
+      isUnknown: true
+    });
+  });
+
+  return rows.sort((left, right) => {
+    const groupCompare = (left.group || "").localeCompare(right.group || "");
+    if (groupCompare !== 0) {
+      return groupCompare;
+    }
+    return (left.label || "").localeCompare(right.label || "");
+  });
+}
+
+function renderWorkspaceKnobTable(compareRuns, configByRunId) {
+  elements.compareKnobHead.innerHTML = "";
+  elements.compareKnobBody.innerHTML = "";
+
+  const headRow = document.createElement("tr");
+  const knobHeader = document.createElement("th");
+  knobHeader.textContent = "Knob";
+  headRow.appendChild(knobHeader);
+  compareRuns.forEach((run) => {
+    const th = document.createElement("th");
+    th.textContent = shortenLabel(getVariantLabel(run), 26);
+    headRow.appendChild(th);
+  });
+  elements.compareKnobHead.appendChild(headRow);
+
+  const rows = buildWorkspaceKnobRows(compareRuns, configByRunId);
+  if (rows.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.className = "muted";
+    td.colSpan = compareRuns.length + 1;
+    td.textContent = "No config-variable differences across selected runs.";
+    tr.appendChild(td);
+    elements.compareKnobBody.appendChild(tr);
+    return;
+  }
+
+  rows.forEach((row, index) => {
+    const tr = document.createElement("tr");
+    if (row.isUnknown) {
+      tr.classList.add("unknown");
+    }
+    if (index === 0 || rows[index - 1].group !== row.group) {
+      tr.classList.add("group-start");
+    }
+
+    const labelCell = document.createElement("td");
+    labelCell.className = "knob-label";
+    labelCell.textContent = `${row.group} · ${row.label}`;
+    tr.appendChild(labelCell);
+
+    row.values.forEach((value) => {
+      const valueCell = document.createElement("td");
+      valueCell.textContent = formatConfigValue(value, row.format);
+      tr.appendChild(valueCell);
+    });
+
+    elements.compareKnobBody.appendChild(tr);
+  });
+}
+
+function renderComparisonWorkspace() {
+  elements.compareSelected.innerHTML = "";
+  elements.compareMatrix.innerHTML = "";
+  elements.compareKnobHead.innerHTML = "";
+  elements.compareKnobBody.innerHTML = "";
+
+  const filteredRuns = getFilteredRuns();
+  const compareRuns = getCompareRuns();
+  elements.compareCount.textContent = `${compareRuns.length}/${MAX_COMPARE_RUNS} selected`;
+  elements.compareAddSelected.disabled = !state.selectedRunId;
+  elements.compareClear.disabled = compareRuns.length === 0;
+
+  const pickerValue = elements.compareRunPicker.value;
+  elements.compareRunPicker.innerHTML = "";
+  const pickerRuns = filteredRuns
+    .slice()
+    .sort((a, b) => getRunSortTimestamp(b, 0) - getRunSortTimestamp(a, 0));
+  pickerRuns.forEach((run) => {
+    const option = document.createElement("option");
+    option.value = run.run_id;
+    const metricValue = getMetricValue(run);
+    option.textContent = `${shortenLabel(getVariantLabel(run), 34)} · ${
+      metricValue !== null ? formatNumber(metricValue) : "—"
+    }`;
+    elements.compareRunPicker.appendChild(option);
+  });
+  elements.compareAddPicker.disabled = pickerRuns.length === 0;
+  if (pickerRuns.some((run) => run.run_id === pickerValue)) {
+    elements.compareRunPicker.value = pickerValue;
+  } else if (state.selectedRunId && pickerRuns.some((run) => run.run_id === state.selectedRunId)) {
+    elements.compareRunPicker.value = state.selectedRunId;
+  }
+
+  compareRuns.forEach((run) => {
+    const chip = document.createElement("div");
+    chip.className = "compare-chip";
+    if (run.run_id === state.selectedRunId) {
+      chip.classList.add("active");
+    }
+    chip.addEventListener("click", () => selectRun(run.run_id));
+
+    const label = document.createElement("span");
+    label.className = "compare-chip-label";
+    label.textContent = shortenLabel(getVariantLabel(run), 28);
+    label.title = getVariantLabel(run);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "compare-chip-remove";
+    remove.textContent = "x";
+    remove.title = `Remove ${getVariantLabel(run)} from compare`;
+    remove.addEventListener("click", (event) => {
+      event.stopPropagation();
+      removeCompareRun(run.run_id);
+      renderAll();
+    });
+
+    chip.appendChild(label);
+    chip.appendChild(remove);
+    elements.compareSelected.appendChild(chip);
+  });
+
+  if (state.indexLoading) {
+    setCompareState("Loading experiment index…");
+    return;
+  }
+  if (state.indexError) {
+    setCompareState(`Unable to load index: ${state.indexError}`, "error");
+    return;
+  }
+  if (!state.indexData) {
+    setCompareState("Load an index to compare runs.");
+    return;
+  }
+  if (compareRuns.length < 2) {
+    setCompareState(
+      "Select at least two runs to compare side-by-side. Tip: Shift-click a row to add it.",
+      "empty"
+    );
+    return;
+  }
+
+  clearCompareState();
+
+  const trueBaselineRun = getTrueBaselineRun();
+  const targetRun = getBaselineToBeatRun();
+  const baselineMetric = trueBaselineRun ? getMetricValue(trueBaselineRun) : null;
+  const targetMetric = targetRun ? getMetricValue(targetRun) : null;
+
+  let baselineConfig = null;
+  if (trueBaselineRun) {
+    const baselineSummaryEntry = ensureSummaryEntry(trueBaselineRun);
+    if (baselineSummaryEntry) {
+      const baselineConfigState = resolveConfigState(
+        trueBaselineRun.run_id,
+        baselineSummaryEntry,
+        baselineSummaryEntry?.data?.paths?.config
+      );
+      if (baselineConfigState.status === "ready") {
+        baselineConfig = baselineConfigState.data;
+      }
+    }
+  }
+
+  const configByRunId = new Map();
+  let configReady = true;
+  let configError = null;
+
+  compareRuns.forEach((run) => {
+    const summaryEntry = ensureSummaryEntry(run);
+    const summary = summaryEntry?.data;
+    const accuracy =
+      typeof run?.metrics?.accuracy === "number"
+        ? run.metrics.accuracy
+        : summary?.metrics?.accuracy ?? null;
+    const loss =
+      typeof run?.metrics?.loss === "number" ? run.metrics.loss : summary?.metrics?.loss ?? null;
+    const topKAccuracy =
+      run?.metrics?.top_k && typeof run.metrics.top_k.accuracy === "number"
+        ? run.metrics.top_k.accuracy
+        : summary?.metrics?.top_k && typeof summary.metrics.top_k.accuracy === "number"
+          ? summary.metrics.top_k.accuracy
+          : null;
+    const metricValue = getMetricValue(run);
+    const deltaVsBaseline = computeDelta(metricValue, baselineMetric);
+    const deltaVsTarget = computeDelta(metricValue, targetMetric);
+
+    let knobSummary = "Config not loaded";
+    if (summaryEntry?.data?.paths?.config) {
+      const configState = resolveConfigState(run.run_id, summaryEntry, summaryEntry.data.paths.config);
+      if (configState.status === "ready") {
+        configByRunId.set(run.run_id, configState.data);
+        if (baselineConfig) {
+          const diff = buildConfigDiffRows(configState.data, baselineConfig);
+          knobSummary = `${diff.changedRows.length} knob changes vs baseline`;
+        } else {
+          knobSummary = "Config ready";
+        }
+      } else if (configState.status === "error") {
+        configReady = false;
+        configError = configState.message;
+        knobSummary = "Config error";
+      } else {
+        configReady = false;
+        knobSummary = "Config loading…";
+      }
+    } else {
+      configReady = false;
+    }
+
+    const card = document.createElement("article");
+    card.className = "compare-matrix-card";
+    if (run.run_id === state.selectedRunId) {
+      card.classList.add("active");
+    }
+    card.addEventListener("click", (event) => {
+      if (event.shiftKey || event.metaKey || event.ctrlKey) {
+        addCompareRun(run.run_id);
+      }
+      selectRun(run.run_id);
+    });
+
+    const cardHeader = document.createElement("div");
+    cardHeader.className = "compare-matrix-header";
+    const title = document.createElement("h4");
+    title.textContent = shortenLabel(getVariantLabel(run), 38);
+    title.title = getVariantLabel(run);
+    const status = document.createElement("span");
+    status.className = `status-badge status-${run.status || "planned"}`;
+    status.textContent = STATUS_LABELS[run.status] || run.status || "—";
+    cardHeader.appendChild(title);
+    cardHeader.appendChild(status);
+
+    const subtitle = document.createElement("p");
+    subtitle.className = "muted";
+    subtitle.textContent = `${getGroupLabel(run)} · ${run.run_id}`;
+
+    const metrics = document.createElement("div");
+    metrics.className = "compare-matrix-metrics";
+    metrics.appendChild(createCompareMatrixMetric("Accuracy", formatNumber(accuracy)));
+    metrics.appendChild(createCompareMatrixMetric("Loss", formatNumber(loss)));
+    if (topKAccuracy !== null) {
+      metrics.appendChild(createCompareMatrixMetric("Top-k", formatNumber(topKAccuracy)));
+    }
+    metrics.appendChild(
+      createCompareMatrixMetric(
+        "Delta vs true baseline",
+        deltaVsBaseline !== null ? formatDelta(deltaVsBaseline) : "—",
+        deltaVsBaseline > 0 ? "positive" : deltaVsBaseline < 0 ? "negative" : "neutral"
+      )
+    );
+    metrics.appendChild(
+      createCompareMatrixMetric(
+        "Delta vs target",
+        deltaVsTarget !== null ? formatDelta(deltaVsTarget) : "—",
+        deltaVsTarget > 0 ? "positive" : deltaVsTarget < 0 ? "negative" : "neutral"
+      )
+    );
+
+    const knob = document.createElement("p");
+    knob.className = "compare-matrix-knobs";
+    knob.textContent = knobSummary;
+
+    card.appendChild(cardHeader);
+    card.appendChild(subtitle);
+    card.appendChild(metrics);
+    card.appendChild(knob);
+    elements.compareMatrix.appendChild(card);
+  });
+
+  if (compareRuns.length >= 2) {
+    if (configError) {
+      setCompareState(`Config comparison warning: ${configError}`, "error");
+    } else if (!configReady || configByRunId.size !== compareRuns.length) {
+      setCompareState("Loading config artifacts for variable comparison…");
+    }
+  }
+
+  if (configByRunId.size === compareRuns.length) {
+    renderWorkspaceKnobTable(compareRuns, configByRunId);
+  } else {
+    const headRow = document.createElement("tr");
+    const knobHeader = document.createElement("th");
+    knobHeader.textContent = "Knob";
+    headRow.appendChild(knobHeader);
+    compareRuns.forEach((run) => {
+      const th = document.createElement("th");
+      th.textContent = shortenLabel(getVariantLabel(run), 26);
+      headRow.appendChild(th);
+    });
+    elements.compareKnobHead.appendChild(headRow);
+
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.className = "muted";
+    td.colSpan = compareRuns.length + 1;
+    td.textContent = "Config variables will appear once selected run configs are loaded.";
+    tr.appendChild(td);
+    elements.compareKnobBody.appendChild(tr);
+  }
 }
 
 function renderLedger() {
@@ -1921,7 +2321,7 @@ async function fetchConfig(runId, summaryEntry, relativePath) {
 
   state.configLoading.add(runId);
   state.configError.delete(runId);
-  renderDetail();
+  renderAll();
 
   try {
     const configUrl = new URL(relativePath, summaryEntry.summaryUrl).toString();
@@ -1940,7 +2340,7 @@ async function fetchConfig(runId, summaryEntry, relativePath) {
     state.configError.set(runId, error.message || "Unable to load config artifact.");
   } finally {
     state.configLoading.delete(runId);
-    renderDetail();
+    renderAll();
   }
 }
 
@@ -2106,6 +2506,55 @@ function clearDetailState() {
   elements.detailState.style.display = "none";
 }
 
+function setCompareState(message, type) {
+  elements.compareState.textContent = message;
+  elements.compareState.className = `state${type ? ` ${type}` : ""}`;
+  elements.compareState.style.display = "block";
+}
+
+function clearCompareState() {
+  elements.compareState.style.display = "none";
+}
+
+function shortenLabel(value, maxLength = 34) {
+  const text = String(value || "—");
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return `${text.slice(0, maxLength - 1)}…`;
+}
+
+function sanitizeCompareSelection() {
+  const runIds = new Set(getRuns().map((run) => run?.run_id).filter(Boolean));
+  state.compareRunIds = state.compareRunIds.filter((runId) => runIds.has(runId));
+}
+
+function getCompareRuns() {
+  sanitizeCompareSelection();
+  return state.compareRunIds.map((runId) => findRunById(runId)).filter(Boolean);
+}
+
+function addCompareRun(runId) {
+  if (!runId) {
+    return;
+  }
+  const existingIndex = state.compareRunIds.indexOf(runId);
+  if (existingIndex >= 0) {
+    state.compareRunIds.splice(existingIndex, 1);
+  } else if (state.compareRunIds.length >= MAX_COMPARE_RUNS) {
+    state.compareRunIds.shift();
+  }
+  state.compareRunIds.push(runId);
+}
+
+function removeCompareRun(runId) {
+  state.compareRunIds = state.compareRunIds.filter((candidate) => candidate !== runId);
+}
+
+function clearCompareRuns() {
+  state.compareRunIds = [];
+}
+
 function createCell(value) {
   const cell = document.createElement("td");
   cell.textContent = value;
@@ -2139,6 +2588,7 @@ function selectRun(runId) {
 function renderAll() {
   renderDecisionCards();
   renderComparisonTable();
+  renderComparisonWorkspace();
   renderLedger();
   renderDetail();
 }
@@ -2359,6 +2809,7 @@ function applyIndexResult(result, options = {}) {
       .map((run) => run?.run_id)
       .filter(Boolean)
   );
+  state.compareRunIds = state.compareRunIds.filter((runId) => runIds.has(runId));
   state.summaryCache.forEach((_, runId) => {
     if (!runIds.has(runId)) {
       state.summaryCache.delete(runId);
@@ -2653,6 +3104,27 @@ function attachEventHandlers() {
 
   elements.metricFilter.addEventListener("change", (event) => {
     state.metricKey = event.target.value;
+    renderAll();
+  });
+
+  elements.compareAddSelected.addEventListener("click", () => {
+    if (state.selectedRunId) {
+      addCompareRun(state.selectedRunId);
+      renderAll();
+    }
+  });
+
+  elements.compareAddPicker.addEventListener("click", () => {
+    const runId = elements.compareRunPicker.value;
+    if (!runId) {
+      return;
+    }
+    addCompareRun(runId);
+    renderAll();
+  });
+
+  elements.compareClear.addEventListener("click", () => {
+    clearCompareRuns();
     renderAll();
   });
 

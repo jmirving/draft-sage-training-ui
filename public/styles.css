@@ -206,6 +206,222 @@ button {
   align-items: start;
 }
 
+.compare-workspace {
+  display: grid;
+  gap: 14px;
+}
+
+.compare-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  align-items: end;
+}
+
+.compare-picker {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  min-width: min(560px, 100%);
+}
+
+.compare-picker label {
+  grid-column: 1 / -1;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.compare-picker select {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: white;
+}
+
+.compare-picker button,
+.compare-actions button {
+  border: 1px solid rgba(25, 24, 23, 0.16);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  border-radius: 10px;
+  font-weight: 600;
+  padding: 9px 12px;
+}
+
+.compare-picker button:disabled,
+.compare-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.compare-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.compare-actions .ghost {
+  background: rgba(25, 24, 23, 0.05);
+}
+
+.compare-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.compare-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(25, 24, 23, 0.14);
+  background: rgba(255, 255, 255, 0.85);
+  padding: 5px 6px 5px 12px;
+  cursor: pointer;
+}
+
+.compare-chip.active {
+  border-color: rgba(217, 108, 61, 0.5);
+  background: rgba(217, 108, 61, 0.12);
+}
+
+.compare-chip-label {
+  font-size: 0.83rem;
+  font-weight: 600;
+}
+
+.compare-chip-remove {
+  border: 0;
+  border-radius: 999px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: rgba(25, 24, 23, 0.1);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.compare-chip-remove:hover {
+  background: rgba(179, 58, 53, 0.2);
+  color: var(--bad);
+}
+
+.compare-matrix {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(255px, 1fr));
+  gap: 12px;
+}
+
+.compare-matrix-card {
+  border: 1px solid rgba(25, 24, 23, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.compare-matrix-card.active {
+  border-color: rgba(217, 108, 61, 0.5);
+  box-shadow: 0 10px 20px rgba(217, 108, 61, 0.16);
+}
+
+.compare-matrix-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.compare-matrix-header h4 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.compare-matrix-metrics {
+  display: grid;
+  gap: 6px;
+}
+
+.compare-matrix-metric {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.83rem;
+}
+
+.compare-matrix-metric-label {
+  color: var(--muted);
+}
+
+.compare-matrix-metric-value {
+  font-weight: 600;
+}
+
+.compare-matrix-metric-value.positive {
+  color: var(--ok);
+}
+
+.compare-matrix-metric-value.negative {
+  color: var(--bad);
+}
+
+.compare-matrix-metric-value.neutral {
+  color: var(--muted);
+}
+
+.compare-matrix-knobs {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.compare-knob-wrap h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
+.compare-knob-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.compare-knob-table th,
+.compare-knob-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid rgba(25, 24, 23, 0.08);
+  text-align: left;
+  vertical-align: top;
+}
+
+.compare-knob-table thead th {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.compare-knob-table td.knob-label {
+  font-weight: 600;
+}
+
+.compare-knob-table tr.group-start td,
+.compare-knob-table tr.group-start th {
+  border-top: 1px solid rgba(25, 24, 23, 0.14);
+}
+
+.compare-knob-table tr.unknown td.knob-label {
+  color: var(--muted);
+}
+
 .panel-header {
   display: flex;
   align-items: center;
@@ -783,6 +999,16 @@ button {
 @media (max-width: 960px) {
   .app-header {
     flex-direction: column;
+  }
+
+  .compare-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .compare-picker {
+    grid-template-columns: 1fr;
+    min-width: 0;
   }
 
   .config-diff-row {
