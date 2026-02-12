@@ -1307,8 +1307,8 @@ function compareComparisonRows(a, b) {
       break;
     case "variant":
       base = compareNullableStrings(
-        a.best ? getVariantLabel(a.best) : "",
-        b.best ? getVariantLabel(b.best) : ""
+        a.bestVariantLabel || "",
+        b.bestVariantLabel || ""
       );
       break;
     case "runs":
