@@ -21,6 +21,7 @@ const GROUP_LABELS = {
   "league-team-priors": "League/team priors",
   "timeaware-priors": "Time-aware priors"
 };
+// Curated list of intentional experiment knobs to show in UI diff/compare views.
 const CONFIG_DIFF_REGISTRY = [
   {
     key: "dataset_label",
@@ -124,46 +125,27 @@ const CONFIG_DIFF_REGISTRY = [
     group: "Reporting"
   }
 ];
-const CONFIG_DIFF_IGNORED_KEYS = new Set([
-  "batch_size",
-  "category",
-  "champion_eligibility_path",
-  "champion_mapping_path",
-  "champion_priors_dir",
-  "dataset_label",
-  "description",
-  "display_name",
-  "epochs",
-  "input_dir",
-  "inspection_keep",
-  "learning_rate",
-  "log_level",
-  "output_dir",
-  "patch_window",
-  "patches",
-  "publish_commit",
-  "publish_data_dir",
-  "publish_indexes",
-  "publish_on_finish",
-  "publish_on_start",
-  "publish_push",
-  "role_priors_dir",
-  "seed",
-  "split_strategy",
-  "test_split",
-  "train_split",
-  "update_index",
-  "use_league_embeddings",
-  "use_team_embeddings",
-  "val_split",
-  "no_league_embeddings",
-  "no_team_embeddings",
-  "champion_priors_strength",
-  "role_priors_strength",
-  "team_league_priors_strength",
-  "series_priors_strength",
-  "champion_priors_time_buckets"
-]);
+const VARIANT_TOKEN_LABELS = {
+  dataset_label: "Dataset",
+  split_strategy: "Split",
+  patch_window: "Patch window",
+  patches: "Patch filter",
+  train_split: "Train split",
+  val_split: "Val split",
+  test_split: "Test split",
+  batch_size: "Batch",
+  epochs: "Epochs",
+  learning_rate: "LR",
+  seed: "Seed",
+  champion_priors_strength: "PB priors",
+  role_priors_strength: "Role priors",
+  team_league_priors_strength: "Team/league priors",
+  series_priors_strength: "Series priors",
+  champion_priors_time_buckets: "PB buckets",
+  use_league_embeddings: "League emb",
+  use_team_embeddings: "Team emb",
+  inspection_keep: "Inspection keep"
+};
 const MAX_COMPARE_RUNS = 6;
 
 const state = {
@@ -479,17 +461,12 @@ function ensureSummaryEntry(run) {
 
 function buildConfigDiffRows(selectedConfig, baselineConfig) {
   const rows = [];
-  const usedKeys = new Set();
 
   CONFIG_DIFF_REGISTRY.forEach((spec) => {
     const selectedValue = readConfigKey(selectedConfig, spec);
     const baselineValue = readConfigKey(baselineConfig, spec);
     if (selectedValue === undefined && baselineValue === undefined) {
       return;
-    }
-    usedKeys.add(spec.key);
-    if (spec.inverseKey) {
-      usedKeys.add(spec.inverseKey);
     }
     rows.push({
       key: spec.key,
@@ -503,35 +480,8 @@ function buildConfigDiffRows(selectedConfig, baselineConfig) {
     });
   });
 
-  const unknown = [];
-  const candidateKeys = new Set([
-    ...Object.keys(selectedConfig || {}),
-    ...Object.keys(baselineConfig || {})
-  ]);
-  candidateKeys.forEach((key) => {
-    if (usedKeys.has(key) || CONFIG_DIFF_IGNORED_KEYS.has(key)) {
-      return;
-    }
-    const selectedValue = selectedConfig ? selectedConfig[key] : undefined;
-    const baselineValue = baselineConfig ? baselineConfig[key] : undefined;
-    if (configValuesEqual(selectedValue, baselineValue)) {
-      return;
-    }
-    unknown.push({
-      key,
-      label: `${titleCase(key)} (${key})`,
-      group: "Other",
-      selectedValue,
-      baselineValue,
-      changed: true,
-      format: null,
-      isUnknown: true
-    });
-  });
-
   const changedRows = rows
     .filter((row) => row.changed)
-    .concat(unknown)
     .sort((a, b) => {
       const groupCompare = (a.group || "").localeCompare(b.group || "");
       if (groupCompare !== 0) {
@@ -726,6 +676,93 @@ function getVariantLabel(run) {
   return cleaned || humanized;
 }
 
+function getGroupReferenceRun(runs) {
+  if (!Array.isArray(runs) || runs.length === 0) {
+    return null;
+  }
+  return runs
+    .map((run, index) => ({
+      run,
+      index,
+      ts: getRunSortTimestamp(run, index)
+    }))
+    .sort((left, right) => {
+      if (left.ts === right.ts) {
+        return left.index - right.index;
+      }
+      return left.ts - right.ts;
+    })[0]?.run || runs[0];
+}
+
+function getVariantTokenLabel(spec) {
+  if (!spec?.key) {
+    return "Knob";
+  }
+  return VARIANT_TOKEN_LABELS[spec.key] || spec.label || titleCase(spec.key);
+}
+
+function getRunConfig(run, loadIfMissing = false) {
+  if (!run?.run_id) {
+    return null;
+  }
+  const cached = state.configCache.get(run.run_id);
+  if (cached?.data) {
+    return cached.data;
+  }
+  if (!loadIfMissing) {
+    return null;
+  }
+  const summaryEntry = ensureSummaryEntry(run);
+  const configPath = summaryEntry?.data?.paths?.config;
+  if (!summaryEntry || !configPath) {
+    return null;
+  }
+  const configState = resolveConfigState(run.run_id, summaryEntry, configPath);
+  if (configState.status === "ready") {
+    return configState.data;
+  }
+  return null;
+}
+
+function getConfigDerivedVariantLabel(groupRuns, run, referenceRun, runConfig, referenceConfig) {
+  if (!run) {
+    return "—";
+  }
+  if (!Array.isArray(groupRuns) || groupRuns.length <= 1) {
+    return "Only run";
+  }
+  if (!referenceRun || !runConfig || !referenceConfig) {
+    return getVariantLabel(run);
+  }
+
+  const tokens = [];
+  CONFIG_DIFF_REGISTRY.forEach((spec) => {
+    const runValue = readConfigKey(runConfig, spec);
+    const referenceValue = readConfigKey(referenceConfig, spec);
+    if (runValue === undefined && referenceValue === undefined) {
+      return;
+    }
+    if (configValuesEqual(runValue, referenceValue)) {
+      return;
+    }
+    tokens.push(`${getVariantTokenLabel(spec)}=${formatConfigValue(runValue, spec.format)}`);
+  });
+
+  if (tokens.length === 0) {
+    if (run.run_id === referenceRun.run_id) {
+      return "Reference";
+    }
+    return getVariantLabel(run);
+  }
+
+  const visibleTokenCount = 3;
+  if (tokens.length <= visibleTokenCount) {
+    return tokens.join(" · ");
+  }
+  const overflow = tokens.length - visibleTokenCount;
+  return `${tokens.slice(0, visibleTokenCount).join(" · ")} +${overflow} more`;
+}
+
 function getMetricValue(run) {
   const metrics = run?.metrics;
   if (!metrics) {
@@ -853,6 +890,9 @@ function buildComparisonRows(runs) {
   const baselineToBeat = getBaselineToBeatRun();
   const baselineMetric = baselineToBeat ? getMetricValue(baselineToBeat) : null;
   return Array.from(buildGroupStats(runs).values()).map((group, index) => {
+    const referenceRun = getGroupReferenceRun(group.runs);
+    const referenceConfig = getRunConfig(referenceRun, true);
+    const bestConfig = getRunConfig(group.best, true);
     const metricSamples = group.runs
       .map((run) => getMetricValue(run))
       .filter((value) => typeof value === "number" && !Number.isNaN(value));
@@ -873,6 +913,14 @@ function buildComparisonRows(runs) {
       updatedRaw,
       updatedTs: Number.isNaN(updatedTs) ? Number.NEGATIVE_INFINITY : updatedTs,
       statusLabel: STATUS_LABELS[group.best?.status] || group.best?.status || "—",
+      referenceRun,
+      bestVariantLabel: getConfigDerivedVariantLabel(
+        group.runs,
+        group.best,
+        referenceRun,
+        bestConfig,
+        referenceConfig
+      ),
       metricMin,
       metricMax,
       metricSpread,
@@ -1092,7 +1140,7 @@ function renderComparisonTable() {
     row.appendChild(createCell(String(group.runCount)));
     row.appendChild(
       createPrimarySecondaryCell(
-        group.best ? getVariantLabel(group.best) : "—",
+        group.best ? group.bestVariantLabel : "—",
         group.best?.run_id || ""
       )
     );
@@ -1323,6 +1371,8 @@ function renderGroupDetailsRow(group, columnCount) {
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
+  const referenceRun = getGroupReferenceRun(group.runs);
+  const referenceConfig = getRunConfig(referenceRun, true);
   const sortedRuns = group.runs
     .slice()
     .map((run, index) => {
@@ -1355,13 +1405,21 @@ function renderGroupDetailsRow(group, columnCount) {
 
   sortedRuns.forEach((entry) => {
     const run = entry.run;
+    const runConfig = getRunConfig(run, true);
+    const variantLabel = getConfigDerivedVariantLabel(
+      group.runs,
+      run,
+      referenceRun,
+      runConfig,
+      referenceConfig
+    );
     const tr = document.createElement("tr");
 
     const variantCell = document.createElement("td");
     variantCell.className = "group-run-variant";
     const variantPrimary = document.createElement("span");
     variantPrimary.className = "table-primary";
-    variantPrimary.textContent = getVariantLabel(run);
+    variantPrimary.textContent = variantLabel;
     variantPrimary.title = getVariantRawLabel(run);
     const variantSecondary = document.createElement("span");
     variantSecondary.className = "table-secondary";
@@ -1452,16 +1510,11 @@ function compareAllValuesEqual(values) {
 
 function buildWorkspaceKnobRows(compareRuns, configByRunId) {
   const rows = [];
-  const usedKeys = new Set();
 
   CONFIG_DIFF_REGISTRY.forEach((spec) => {
     const values = compareRuns.map((run) => readConfigKey(configByRunId.get(run.run_id), spec));
     if (values.every((value) => value === undefined)) {
       return;
-    }
-    usedKeys.add(spec.key);
-    if (spec.inverseKey) {
-      usedKeys.add(spec.inverseKey);
     }
     if (compareAllValuesEqual(values)) {
       return;
@@ -1473,32 +1526,6 @@ function buildWorkspaceKnobRows(compareRuns, configByRunId) {
       values,
       format: spec.format || null,
       isUnknown: false
-    });
-  });
-
-  const candidateKeys = new Set();
-  compareRuns.forEach((run) => {
-    const config = configByRunId.get(run.run_id) || {};
-    Object.keys(config).forEach((key) => candidateKeys.add(key));
-  });
-  candidateKeys.forEach((key) => {
-    if (usedKeys.has(key) || CONFIG_DIFF_IGNORED_KEYS.has(key)) {
-      return;
-    }
-    const values = compareRuns.map((run) => {
-      const config = configByRunId.get(run.run_id) || {};
-      return Object.prototype.hasOwnProperty.call(config, key) ? config[key] : undefined;
-    });
-    if (compareAllValuesEqual(values)) {
-      return;
-    }
-    rows.push({
-      key,
-      label: `${titleCase(key)} (${key})`,
-      group: "Other",
-      values,
-      format: null,
-      isUnknown: true
     });
   });
 
@@ -1532,7 +1559,7 @@ function renderWorkspaceKnobTable(compareRuns, configByRunId) {
     const td = document.createElement("td");
     td.className = "muted";
     td.colSpan = compareRuns.length + 1;
-    td.textContent = "No config-variable differences across selected runs.";
+    td.textContent = "No intentional knob differences across selected runs.";
     tr.appendChild(td);
     elements.compareKnobBody.appendChild(tr);
     return;
