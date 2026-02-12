@@ -21,15 +21,163 @@ const GROUP_LABELS = {
   "league-team-priors": "League/team priors",
   "timeaware-priors": "Time-aware priors"
 };
+const CONFIG_DIFF_REGISTRY = [
+  {
+    key: "dataset_label",
+    label: "Dataset label",
+    group: "Data"
+  },
+  {
+    key: "split_strategy",
+    label: "Split strategy",
+    group: "Data"
+  },
+  {
+    key: "patch_window",
+    label: "Patch window",
+    group: "Data"
+  },
+  {
+    key: "patches",
+    label: "Patch filter",
+    group: "Data",
+    format: "list"
+  },
+  {
+    key: "train_split",
+    label: "Train split",
+    group: "Data"
+  },
+  {
+    key: "val_split",
+    label: "Validation split",
+    group: "Data"
+  },
+  {
+    key: "test_split",
+    label: "Test split",
+    group: "Data"
+  },
+  {
+    key: "batch_size",
+    label: "Batch size",
+    group: "Optimization"
+  },
+  {
+    key: "epochs",
+    label: "Epochs",
+    group: "Optimization"
+  },
+  {
+    key: "learning_rate",
+    label: "Learning rate",
+    group: "Optimization"
+  },
+  {
+    key: "seed",
+    label: "Seed",
+    group: "Optimization"
+  },
+  {
+    key: "champion_priors_strength",
+    label: "Champion PB priors strength",
+    group: "Priors"
+  },
+  {
+    key: "role_priors_strength",
+    label: "Role priors strength",
+    group: "Priors"
+  },
+  {
+    key: "team_league_priors_strength",
+    label: "Team/league priors strength",
+    group: "Priors"
+  },
+  {
+    key: "series_priors_strength",
+    label: "Series priors strength",
+    group: "Priors"
+  },
+  {
+    key: "champion_priors_time_buckets",
+    label: "Champion priors time buckets",
+    group: "Priors",
+    format: "list"
+  },
+  {
+    key: "use_league_embeddings",
+    inverseKey: "no_league_embeddings",
+    label: "League embeddings",
+    group: "Embeddings",
+    format: "bool"
+  },
+  {
+    key: "use_team_embeddings",
+    inverseKey: "no_team_embeddings",
+    label: "Team embeddings",
+    group: "Embeddings",
+    format: "bool"
+  },
+  {
+    key: "inspection_keep",
+    label: "Inspection sample size",
+    group: "Reporting"
+  }
+];
+const CONFIG_DIFF_IGNORED_KEYS = new Set([
+  "batch_size",
+  "category",
+  "champion_eligibility_path",
+  "champion_mapping_path",
+  "champion_priors_dir",
+  "dataset_label",
+  "description",
+  "display_name",
+  "epochs",
+  "input_dir",
+  "inspection_keep",
+  "learning_rate",
+  "log_level",
+  "output_dir",
+  "patch_window",
+  "patches",
+  "publish_commit",
+  "publish_data_dir",
+  "publish_indexes",
+  "publish_on_finish",
+  "publish_on_start",
+  "publish_push",
+  "role_priors_dir",
+  "seed",
+  "split_strategy",
+  "test_split",
+  "train_split",
+  "update_index",
+  "use_league_embeddings",
+  "use_team_embeddings",
+  "val_split",
+  "no_league_embeddings",
+  "no_team_embeddings",
+  "champion_priors_strength",
+  "role_priors_strength",
+  "team_league_priors_strength",
+  "series_priors_strength",
+  "champion_priors_time_buckets"
+]);
 
 const state = {
   indexData: null,
   indexLoading: false,
   indexError: null,
   summaryCache: new Map(),
+  summaryBackgroundLoading: new Set(),
+  summaryBackgroundError: new Map(),
   summaryLoading: false,
   summaryError: null,
   summaryInline: false,
+  configCache: new Map(),
+  configLoading: new Set(),
+  configError: new Map(),
   inspectionCache: new Map(),
   inspectionLoading: new Set(),
   inspectionError: new Map(),
@@ -191,6 +339,213 @@ function titleCase(value) {
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+function formatConfigValue(value, format) {
+  if (value === undefined || value === null || value === "") {
+    return "—";
+  }
+  if (format === "bool") {
+    return value ? "On" : "Off";
+  }
+  if (format === "list") {
+    if (!Array.isArray(value)) {
+      return String(value);
+    }
+    return value.length > 0 ? value.join(", ") : "—";
+  }
+  if (typeof value === "number") {
+    if (Number.isNaN(value)) {
+      return "—";
+    }
+    if (Number.isInteger(value)) {
+      return String(value);
+    }
+    if (Math.abs(value) < 0.01) {
+      return value.toFixed(5);
+    }
+    if (Math.abs(value) < 1) {
+      return value.toFixed(4);
+    }
+    return value.toFixed(3);
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value.join(", ") : "—";
+  }
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+  return String(value);
+}
+
+function readConfigKey(config, spec) {
+  if (!config || typeof config !== "object" || !spec) {
+    return undefined;
+  }
+  if (Object.prototype.hasOwnProperty.call(config, spec.key)) {
+    return config[spec.key];
+  }
+  if (spec.inverseKey && Object.prototype.hasOwnProperty.call(config, spec.inverseKey)) {
+    return !Boolean(config[spec.inverseKey]);
+  }
+  return undefined;
+}
+
+function serializeConfigValue(value) {
+  if (value === undefined) {
+    return "__undefined__";
+  }
+  if (value === null) {
+    return "__null__";
+  }
+  if (typeof value === "number") {
+    if (Number.isNaN(value)) {
+      return "__nan__";
+    }
+    return `number:${value}`;
+  }
+  if (typeof value === "boolean") {
+    return `bool:${value}`;
+  }
+  if (typeof value === "string") {
+    return `string:${value}`;
+  }
+  if (Array.isArray(value)) {
+    return `array:${JSON.stringify(value)}`;
+  }
+  if (typeof value === "object") {
+    const ordered = Object.keys(value)
+      .sort()
+      .reduce((acc, key) => {
+        acc[key] = value[key];
+        return acc;
+      }, {});
+    return `object:${JSON.stringify(ordered)}`;
+  }
+  return String(value);
+}
+
+function configValuesEqual(left, right) {
+  return serializeConfigValue(left) === serializeConfigValue(right);
+}
+
+function ensureSummaryEntry(run) {
+  if (!run?.run_id) {
+    return null;
+  }
+  const cached = state.summaryCache.get(run.run_id);
+  if (cached) {
+    return cached;
+  }
+  if (
+    !state.summaryInline &&
+    run.summary_path &&
+    !state.summaryBackgroundLoading.has(run.run_id)
+  ) {
+    state.summaryBackgroundLoading.add(run.run_id);
+    state.summaryBackgroundError.delete(run.run_id);
+    fetchSummary(run, {
+      silent: true
+    }).finally(() => {
+      state.summaryBackgroundLoading.delete(run.run_id);
+      renderDetail();
+    });
+  }
+  return null;
+}
+
+function buildConfigDiffRows(selectedConfig, baselineConfig) {
+  const rows = [];
+  const usedKeys = new Set();
+
+  CONFIG_DIFF_REGISTRY.forEach((spec) => {
+    const selectedValue = readConfigKey(selectedConfig, spec);
+    const baselineValue = readConfigKey(baselineConfig, spec);
+    if (selectedValue === undefined && baselineValue === undefined) {
+      return;
+    }
+    usedKeys.add(spec.key);
+    if (spec.inverseKey) {
+      usedKeys.add(spec.inverseKey);
+    }
+    rows.push({
+      key: spec.key,
+      label: spec.label,
+      group: spec.group || "Other",
+      selectedValue,
+      baselineValue,
+      changed: !configValuesEqual(selectedValue, baselineValue),
+      format: spec.format || null,
+      isUnknown: false
+    });
+  });
+
+  const unknown = [];
+  const candidateKeys = new Set([
+    ...Object.keys(selectedConfig || {}),
+    ...Object.keys(baselineConfig || {})
+  ]);
+  candidateKeys.forEach((key) => {
+    if (usedKeys.has(key) || CONFIG_DIFF_IGNORED_KEYS.has(key)) {
+      return;
+    }
+    const selectedValue = selectedConfig ? selectedConfig[key] : undefined;
+    const baselineValue = baselineConfig ? baselineConfig[key] : undefined;
+    if (configValuesEqual(selectedValue, baselineValue)) {
+      return;
+    }
+    unknown.push({
+      key,
+      label: `${titleCase(key)} (${key})`,
+      group: "Other",
+      selectedValue,
+      baselineValue,
+      changed: true,
+      format: null,
+      isUnknown: true
+    });
+  });
+
+  const changedRows = rows
+    .filter((row) => row.changed)
+    .concat(unknown)
+    .sort((a, b) => {
+      const groupCompare = (a.group || "").localeCompare(b.group || "");
+      if (groupCompare !== 0) {
+        return groupCompare;
+      }
+      return (a.label || "").localeCompare(b.label || "");
+    });
+
+  return {
+    changedRows,
+    unchangedCount: rows.filter((row) => !row.changed).length
+  };
+}
+
+function createConfigDiffRow(row) {
+  const item = document.createElement("div");
+  item.className = "config-diff-row";
+  if (row.isUnknown) {
+    item.classList.add("unknown");
+  }
+
+  const label = document.createElement("span");
+  label.className = "config-diff-label";
+  label.textContent = row.label;
+
+  const selected = document.createElement("span");
+  selected.className = "config-diff-value selected";
+  selected.textContent = `Selected: ${formatConfigValue(row.selectedValue, row.format)}`;
+
+  const baseline = document.createElement("span");
+  baseline.className = "config-diff-value baseline";
+  baseline.textContent = `Baseline: ${formatConfigValue(row.baselineValue, row.format)}`;
+
+  item.appendChild(label);
+  item.appendChild(selected);
+  item.appendChild(baseline);
+  return item;
 }
 
 function updateQueryParam(path) {
@@ -956,9 +1311,202 @@ function renderDetail() {
   elements.detailBody.appendChild(detailGrid);
   elements.detailBody.appendChild(metrics);
   elements.detailBody.appendChild(comparison);
+  elements.detailBody.appendChild(renderConfigDiffSection(selectedRun, summaryEntry));
   elements.detailBody.appendChild(renderPerSlotSection(summary, selectedRun.run_id));
   elements.detailBody.appendChild(artifacts);
   elements.detailBody.appendChild(renderInspectionSection(selectedRun, summaryEntry));
+}
+
+function resolveConfigState(runId, summaryEntry, relativePath) {
+  if (!relativePath) {
+    return {
+      status: "missing",
+      message: "Config artifact was not published for this run."
+    };
+  }
+
+  const cached = state.configCache.get(runId);
+  if (cached?.data) {
+    return {
+      status: "ready",
+      data: cached.data
+    };
+  }
+
+  const error = state.configError.get(runId);
+  if (error) {
+    return {
+      status: "error",
+      message: error
+    };
+  }
+
+  if (!state.configLoading.has(runId)) {
+    fetchConfig(runId, summaryEntry, relativePath);
+  }
+  return {
+    status: "loading"
+  };
+}
+
+function renderConfigDiffSection(selectedRun, selectedSummaryEntry) {
+  const section = document.createElement("section");
+  section.className = "config-diff";
+
+  const header = document.createElement("div");
+  header.className = "panel-header";
+  const title = document.createElement("h4");
+  title.textContent = "Config Diff vs True Baseline";
+  const count = document.createElement("span");
+  count.className = "pill muted-pill";
+  header.appendChild(title);
+  header.appendChild(count);
+  section.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "config-diff-body";
+
+  const baselineRun = getTrueBaselineRun();
+  if (!baselineRun) {
+    count.textContent = "No baseline";
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "True baseline run is not set in this index.";
+    body.appendChild(empty);
+    section.appendChild(body);
+    return section;
+  }
+
+  const context = document.createElement("p");
+  context.className = "muted";
+  context.textContent = `Baseline: ${getVariantLabel(baselineRun)}`;
+  body.appendChild(context);
+
+  let baselineSummaryEntry = null;
+  if (baselineRun.run_id === selectedRun.run_id) {
+    baselineSummaryEntry = selectedSummaryEntry;
+  } else {
+    baselineSummaryEntry = ensureSummaryEntry(baselineRun);
+    const summaryLoadError = state.summaryBackgroundError.get(baselineRun.run_id);
+    if (summaryLoadError) {
+      count.textContent = "Summary error";
+      const error = document.createElement("p");
+      error.className = "muted";
+      error.textContent = `Unable to load baseline summary: ${summaryLoadError}`;
+      body.appendChild(error);
+      section.appendChild(body);
+      return section;
+    }
+    if (!baselineSummaryEntry) {
+      count.textContent = "Loading";
+      const loading = document.createElement("p");
+      loading.className = "muted";
+      loading.textContent = "Loading baseline summary for config comparison…";
+      body.appendChild(loading);
+      section.appendChild(body);
+      return section;
+    }
+  }
+
+  const selectedConfigPath = selectedSummaryEntry?.data?.paths?.config;
+  const baselineConfigPath = baselineSummaryEntry?.data?.paths?.config;
+  const selectedConfigState = resolveConfigState(
+    selectedRun.run_id,
+    selectedSummaryEntry,
+    selectedConfigPath
+  );
+  const baselineConfigState =
+    baselineRun.run_id === selectedRun.run_id
+      ? selectedConfigState
+      : resolveConfigState(baselineRun.run_id, baselineSummaryEntry, baselineConfigPath);
+
+  const states = [selectedConfigState, baselineConfigState];
+  const errorState = states.find((stateEntry) => stateEntry.status === "error");
+  if (errorState) {
+    count.textContent = "Config error";
+    const error = document.createElement("p");
+    error.className = "muted";
+    error.textContent = errorState.message || "Unable to load config artifacts.";
+    body.appendChild(error);
+    section.appendChild(body);
+    return section;
+  }
+
+  const missingState = states.find((stateEntry) => stateEntry.status === "missing");
+  if (missingState) {
+    count.textContent = "Missing config";
+    const missing = document.createElement("p");
+    missing.className = "muted";
+    missing.textContent = missingState.message;
+    body.appendChild(missing);
+    section.appendChild(body);
+    return section;
+  }
+
+  const loadingState = states.some((stateEntry) => stateEntry.status === "loading");
+  if (loadingState) {
+    count.textContent = "Loading";
+    const loading = document.createElement("p");
+    loading.className = "muted";
+    loading.textContent = "Loading config artifacts for diff…";
+    body.appendChild(loading);
+    section.appendChild(body);
+    return section;
+  }
+
+  const diff = buildConfigDiffRows(selectedConfigState.data, baselineConfigState.data);
+  count.textContent = `${diff.changedRows.length} changed`;
+
+  if (baselineRun.run_id === selectedRun.run_id) {
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = "Selected run is the true baseline.";
+    body.appendChild(note);
+  }
+
+  if (diff.changedRows.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No tracked config differences from the true baseline.";
+    body.appendChild(empty);
+    section.appendChild(body);
+    return section;
+  }
+
+  const groupedRows = new Map();
+  diff.changedRows.forEach((row) => {
+    const group = row.group || "Other";
+    if (!groupedRows.has(group)) {
+      groupedRows.set(group, []);
+    }
+    groupedRows.get(group).push(row);
+  });
+
+  Array.from(groupedRows.keys())
+    .sort((left, right) => left.localeCompare(right))
+    .forEach((group) => {
+      const groupBlock = document.createElement("div");
+      groupBlock.className = "config-diff-group";
+      const groupTitle = document.createElement("h5");
+      groupTitle.textContent = group;
+      groupBlock.appendChild(groupTitle);
+
+      const list = document.createElement("div");
+      list.className = "config-diff-list";
+      groupedRows.get(group).forEach((row) => {
+        list.appendChild(createConfigDiffRow(row));
+      });
+      groupBlock.appendChild(list);
+      body.appendChild(groupBlock);
+    });
+
+  const stableCount = document.createElement("p");
+  stableCount.className = "muted";
+  stableCount.textContent = `Tracked knobs unchanged: ${diff.unchangedCount}`;
+  body.appendChild(stableCount);
+
+  section.appendChild(body);
+  return section;
 }
 
 function renderPerSlotSection(summary, runId) {
@@ -1360,6 +1908,40 @@ function renderInspectionSection(run, summaryEntry) {
 
   section.appendChild(body);
   return section;
+}
+
+async function fetchConfig(runId, summaryEntry, relativePath) {
+  if (!summaryEntry?.summaryUrl) {
+    state.configError.set(runId, "Missing summary URL for config artifact.");
+    return;
+  }
+  if (state.configLoading.has(runId)) {
+    return;
+  }
+
+  state.configLoading.add(runId);
+  state.configError.delete(runId);
+  renderDetail();
+
+  try {
+    const configUrl = new URL(relativePath, summaryEntry.summaryUrl).toString();
+    const response = await fetch(withCacheBust(configUrl), {
+      cache: "no-store"
+    });
+    if (!response.ok) {
+      throw new Error(`Config fetch failed (${response.status})`);
+    }
+    const data = await response.json();
+    state.configCache.set(runId, {
+      data,
+      configUrl
+    });
+  } catch (error) {
+    state.configError.set(runId, error.message || "Unable to load config artifact.");
+  } finally {
+    state.configLoading.delete(runId);
+    renderDetail();
+  }
 }
 
 async function fetchInspectionSamples(runId, summaryEntry, relativePath) {
@@ -1782,6 +2364,31 @@ function applyIndexResult(result, options = {}) {
       state.summaryCache.delete(runId);
     }
   });
+  state.summaryBackgroundLoading.forEach((runId) => {
+    if (!runIds.has(runId)) {
+      state.summaryBackgroundLoading.delete(runId);
+    }
+  });
+  state.summaryBackgroundError.forEach((_, runId) => {
+    if (!runIds.has(runId)) {
+      state.summaryBackgroundError.delete(runId);
+    }
+  });
+  state.configCache.forEach((_, runId) => {
+    if (!runIds.has(runId)) {
+      state.configCache.delete(runId);
+    }
+  });
+  state.configLoading.forEach((runId) => {
+    if (!runIds.has(runId)) {
+      state.configLoading.delete(runId);
+    }
+  });
+  state.configError.forEach((_, runId) => {
+    if (!runIds.has(runId)) {
+      state.configError.delete(runId);
+    }
+  });
   state.inspectionCache.forEach((_, runId) => {
     if (!runIds.has(runId)) {
       state.inspectionCache.delete(runId);
@@ -1877,8 +2484,14 @@ async function fetchSummary(run, options = {}) {
       data,
       summaryUrl
     });
+    state.summaryBackgroundError.delete(run.run_id);
   } catch (error) {
-    if (!silent) {
+    if (silent) {
+      state.summaryBackgroundError.set(
+        run.run_id,
+        error.message || "Unable to load summary."
+      );
+    } else {
       state.summaryError = error.message || "Unable to load summary.";
     }
   } finally {
@@ -1899,6 +2512,14 @@ async function loadIndexFromFetch(path, updateUrl) {
   state.indexError = null;
   state.indexData = null;
   state.summaryCache.clear();
+  state.summaryBackgroundLoading.clear();
+  state.summaryBackgroundError.clear();
+  state.configCache.clear();
+  state.configLoading.clear();
+  state.configError.clear();
+  state.inspectionCache.clear();
+  state.inspectionLoading.clear();
+  state.inspectionError.clear();
   state.selectedRunId = null;
   state.refreshError = null;
   state.indexSources = paths;

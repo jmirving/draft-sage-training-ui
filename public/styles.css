@@ -352,6 +352,66 @@ button {
   padding: 14px;
 }
 
+.config-diff {
+  background: rgba(77, 92, 150, 0.08);
+  border-radius: 14px;
+  padding: 16px;
+  border: 1px solid rgba(77, 92, 150, 0.2);
+}
+
+.config-diff-body {
+  display: grid;
+  gap: 12px;
+}
+
+.config-diff-group {
+  display: grid;
+  gap: 8px;
+}
+
+.config-diff-group h5 {
+  margin: 0;
+  font-size: 0.86rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.config-diff-list {
+  display: grid;
+  gap: 8px;
+}
+
+.config-diff-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(170px, 1fr) minmax(170px, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(25, 24, 23, 0.1);
+}
+
+.config-diff-row.unknown {
+  border-style: dashed;
+}
+
+.config-diff-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.config-diff-value {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.config-diff-value.selected {
+  color: var(--ink);
+}
+
 .per-slot {
   background: rgba(47, 125, 75, 0.08);
   border-radius: 14px;
@@ -723,6 +783,11 @@ button {
 @media (max-width: 960px) {
   .app-header {
     flex-direction: column;
+  }
+
+  .config-diff-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
 
   .decision-row {
