@@ -518,10 +518,12 @@ button {
 }
 
 .compare-knob-table thead th {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  text-transform: none;
+  letter-spacing: 0.01em;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  white-space: normal;
 }
 
 .compare-knob-table th:first-child,
@@ -547,6 +549,16 @@ button {
   color: var(--muted);
 }
 
+.compare-knob-table th.run-col,
+.compare-knob-table td.run-col {
+  text-align: center;
+}
+
+.compare-knob-table th + th,
+.compare-knob-table td + td {
+  border-left: 1px solid rgba(25, 24, 23, 0.07);
+}
+
 .compare-slot-table {
   width: 100%;
   border-collapse: collapse;
@@ -563,10 +575,12 @@ button {
 }
 
 .compare-slot-table thead th {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  text-transform: none;
+  letter-spacing: 0.01em;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  white-space: normal;
 }
 
 .compare-slot-table th:first-child,
@@ -577,6 +591,16 @@ button {
 .compare-slot-table th:not(:first-child),
 .compare-slot-table td:not(.slot-label) {
   text-align: center;
+}
+
+.compare-slot-table th.run-col,
+.compare-slot-table td.run-col {
+  text-align: center;
+}
+
+.compare-slot-table th + th,
+.compare-slot-table td + td {
+  border-left: 1px solid rgba(25, 24, 23, 0.07);
 }
 
 .compare-slot-table tr.group-start td,

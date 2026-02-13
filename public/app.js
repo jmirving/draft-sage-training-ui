@@ -1959,10 +1959,7 @@ function applyWorkspaceTableColgroup(tableElement, runCount, firstColumnPercent)
   if (!tableElement) {
     return;
   }
-  const existing = tableElement.querySelector("colgroup");
-  if (existing) {
-    existing.remove();
-  }
+  tableElement.querySelectorAll("colgroup").forEach((node) => node.remove());
   const colgroup = document.createElement("colgroup");
   const firstCol = document.createElement("col");
   firstCol.style.width = `${firstColumnPercent}%`;
@@ -1989,8 +1986,9 @@ function renderWorkspaceKnobTable(compareRuns, configByRunId, runLabelsById = ne
   headRow.appendChild(knobHeader);
   compareRuns.forEach((run) => {
     const th = document.createElement("th");
+    th.className = "run-col";
     const label = runLabelsById.get(run.run_id) || getRunLabel(run, { includeGroup: true });
-    th.textContent = shortenLabel(label, 30);
+    th.textContent = shortenLabel(label, 64);
     th.title = label;
     headRow.appendChild(th);
   });
@@ -2080,8 +2078,9 @@ function renderWorkspaceSlotTable(compareRuns, summaryByRunId, runLabelsById = n
   headRow.appendChild(slotHeader);
   compareRuns.forEach((run) => {
     const th = document.createElement("th");
+    th.className = "run-col";
     const label = runLabelsById.get(run.run_id) || getRunLabel(run, { includeGroup: true });
-    th.textContent = shortenLabel(label, 30);
+    th.textContent = shortenLabel(label, 64);
     th.title = label;
     headRow.appendChild(th);
   });
@@ -2131,7 +2130,7 @@ function renderWorkspaceSlotTable(compareRuns, summaryByRunId, runLabelsById = n
 
     compareRuns.forEach((run) => {
       const valueCell = document.createElement("td");
-      valueCell.className = "compare-slot-value";
+      valueCell.className = "compare-slot-value run-col";
       const row = slotEntry.values.get(run.run_id);
       if (!row) {
         valueCell.textContent = "—";
@@ -2423,9 +2422,10 @@ function renderComparisonWorkspace() {
     headRow.appendChild(knobHeader);
     compareRuns.forEach((run) => {
       const th = document.createElement("th");
+      th.className = "run-col";
       const label =
         compareRunLabelsById.get(run.run_id) || getRunLabel(run, { includeGroup: true });
-      th.textContent = shortenLabel(label, 30);
+      th.textContent = shortenLabel(label, 64);
       th.title = label;
       headRow.appendChild(th);
     });
