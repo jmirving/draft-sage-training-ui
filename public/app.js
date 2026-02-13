@@ -1283,6 +1283,9 @@ function renderComparisonTable() {
 
   const columnCount = 8;
   const groups = buildComparisonRows(runs);
+  if (state.groupFilter !== "all" && groups.length === 1) {
+    state.expandedGroupKeys.add(groups[0].key);
+  }
   renderGroupSpread(groups);
   groups.sort(compareComparisonRows);
 
@@ -1293,12 +1296,22 @@ function renderComparisonTable() {
       row.classList.add("active");
     }
     row.addEventListener("click", (event) => {
+      if (event.target.closest("button")) {
+        return;
+      }
       const runId = group.best?.run_id;
       if (!runId) {
         return;
       }
       if (event.shiftKey || event.metaKey || event.ctrlKey) {
         addCompareRun(runId);
+      }
+      if (state.expandedGroupKeys.has(group.key)) {
+        if (state.selectedRunId === runId) {
+          state.expandedGroupKeys.delete(group.key);
+        }
+      } else {
+        state.expandedGroupKeys.add(group.key);
       }
       selectRun(runId);
     });
@@ -1414,8 +1427,14 @@ function renderGroupSpread(groups) {
       row.classList.add("active");
     }
     row.addEventListener("click", () => {
+      state.groupFilter = group.key;
+      elements.groupFilter.value = group.key;
+      state.expandedGroupKeys.add(group.key);
       if (group.best?.run_id) {
         selectRun(group.best.run_id);
+      } else {
+        syncSelection();
+        renderAll();
       }
     });
 
@@ -1544,6 +1563,44 @@ function renderGroupDetailsRow(group, columnCount) {
   title.textContent = `${group.label}: ${group.runCount} runs`;
   wrap.appendChild(title);
 
+  const actions = document.createElement("div");
+  actions.className = "group-details-actions";
+
+  const compareAllButton = document.createElement("button");
+  compareAllButton.type = "button";
+  compareAllButton.className = "group-details-action";
+  compareAllButton.textContent = "Compare all runs";
+  const runIds = group.runs.map((run) => run?.run_id).filter(Boolean);
+  const allCompared =
+    runIds.length > 0 && runIds.every((runId) => state.compareRunIds.includes(runId));
+  compareAllButton.disabled = runIds.length === 0 || allCompared;
+  compareAllButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    runIds.forEach((runId) => includeCompareRun(runId));
+    renderAll();
+  });
+  actions.appendChild(compareAllButton);
+
+  const filterButton = document.createElement("button");
+  filterButton.type = "button";
+  filterButton.className = "group-details-action ghost";
+  if (state.groupFilter === group.key) {
+    filterButton.textContent = "Showing this group";
+    filterButton.disabled = true;
+  } else {
+    filterButton.textContent = "Show only this group";
+    filterButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.groupFilter = group.key;
+      elements.groupFilter.value = group.key;
+      state.expandedGroupKeys.add(group.key);
+      syncSelection();
+      renderAll();
+    });
+  }
+  actions.appendChild(filterButton);
+  wrap.appendChild(actions);
+
   const tableWrap = document.createElement("div");
   tableWrap.className = "group-run-table-wrap";
   const table = document.createElement("table");
@@ -1610,6 +1667,13 @@ function renderGroupDetailsRow(group, columnCount) {
       referenceConfig
     );
     const tr = document.createElement("tr");
+    tr.className = "group-run-row";
+    if (run.run_id === state.selectedRunId) {
+      tr.classList.add("active");
+    }
+    tr.addEventListener("click", () => {
+      selectRun(run.run_id);
+    });
 
     const variantCell = document.createElement("td");
     variantCell.className = "group-run-variant";
@@ -3233,6 +3297,19 @@ function sanitizeCompareSelection() {
 function getCompareRuns() {
   sanitizeCompareSelection();
   return state.compareRunIds.map((runId) => findRunById(runId)).filter(Boolean);
+}
+
+function includeCompareRun(runId) {
+  if (!runId) {
+    return;
+  }
+  if (state.compareRunIds.includes(runId)) {
+    return;
+  }
+  if (state.compareRunIds.length >= MAX_COMPARE_RUNS) {
+    state.compareRunIds.shift();
+  }
+  state.compareRunIds.push(runId);
 }
 
 function addCompareRun(runId) {

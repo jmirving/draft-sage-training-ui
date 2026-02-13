@@ -215,9 +215,16 @@ button {
 
 .analysis-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 16px;
   align-items: start;
+}
+
+.panel-hint {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .compare-workspace {
@@ -681,6 +688,31 @@ button {
   color: var(--muted);
 }
 
+.group-details-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.group-details-action {
+  border: 1px solid rgba(25, 24, 23, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 4px 10px;
+}
+
+.group-details-action.ghost {
+  background: rgba(25, 24, 23, 0.05);
+}
+
+.group-details-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .group-run-table-wrap {
   overflow-x: auto;
 }
@@ -709,6 +741,18 @@ button {
 .group-run-table td.group-run-variant {
   display: grid;
   gap: 2px;
+}
+
+.group-run-row {
+  cursor: pointer;
+}
+
+.group-run-row:hover {
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.group-run-row.active {
+  background: rgba(217, 108, 61, 0.12);
 }
 
 .group-run-actions {
@@ -1202,6 +1246,15 @@ button {
 
 .state.empty {
   border: 1px dashed rgba(95, 90, 82, 0.4);
+}
+
+@media (min-width: 1100px) {
+  .detail {
+    position: sticky;
+    top: 14px;
+    max-height: calc(100vh - 28px);
+    overflow: auto;
+  }
 }
 
 .muted {
