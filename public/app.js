@@ -1111,13 +1111,8 @@ function getRunUpdatedAt(run) {
   return parseRunIdTimestamp(run?.run_id);
 }
 
-function closeRunActionMenus(exceptMenu = null, exceptRunId = null) {
+function closeRunActionMenus(exceptRunId = null) {
   state.activeRunActionMenuRunId = exceptRunId;
-  document.querySelectorAll(".run-action-menu[open]").forEach((menu) => {
-    if (menu !== exceptMenu) {
-      menu.open = false;
-    }
-  });
 }
 
 function getRunsByStatus(status) {
@@ -1795,30 +1790,26 @@ function renderGroupDetailsRow(group, columnCount) {
     const actionsCell = document.createElement("td");
     actionsCell.className = "group-run-actions";
 
-    const actionMenu = document.createElement("details");
+    const actionMenu = document.createElement("div");
     actionMenu.className = "run-action-menu";
-    if (state.activeRunActionMenuRunId === run.run_id) {
-      actionMenu.open = true;
-    }
+    const isMenuOpen = state.activeRunActionMenuRunId === run.run_id;
+    actionMenu.classList.toggle("open", isMenuOpen);
     actionMenu.addEventListener("click", (event) => {
       event.stopPropagation();
     });
-    actionMenu.addEventListener("toggle", () => {
-      if (actionMenu.open) {
-        closeRunActionMenus(actionMenu, run.run_id);
-        if (state.selectedRunId !== run.run_id) {
-          selectRun(run.run_id);
-        }
-      } else if (state.activeRunActionMenuRunId === run.run_id) {
-        state.activeRunActionMenuRunId = null;
-      }
-    });
 
-    const actionSummary = document.createElement("summary");
-    actionSummary.className = "run-action-trigger";
-    actionSummary.textContent = "⋮";
-    actionSummary.setAttribute("aria-label", "Run actions");
-    actionMenu.appendChild(actionSummary);
+    const actionTrigger = document.createElement("button");
+    actionTrigger.type = "button";
+    actionTrigger.className = "run-action-trigger";
+    actionTrigger.textContent = "⋮";
+    actionTrigger.setAttribute("aria-label", "Run actions");
+    actionTrigger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const wasOpen = state.activeRunActionMenuRunId === run.run_id;
+      closeRunActionMenus(wasOpen ? null : run.run_id);
+      selectRun(run.run_id);
+    });
+    actionMenu.appendChild(actionTrigger);
 
     const actionList = document.createElement("div");
     actionList.className = "run-action-popover";
@@ -1829,9 +1820,8 @@ function renderGroupDetailsRow(group, columnCount) {
     openButton.textContent = "Open";
     openButton.addEventListener("click", (event) => {
       event.stopPropagation();
+      closeRunActionMenus();
       selectRun(run.run_id);
-      state.activeRunActionMenuRunId = null;
-      actionMenu.open = false;
     });
 
     const baselineButton = document.createElement("button");
@@ -1843,8 +1833,7 @@ function renderGroupDetailsRow(group, columnCount) {
       event.stopPropagation();
       state.groupBaselineRunIds.set(group.key, run.run_id);
       persistGroupBaselineOverrides();
-      state.activeRunActionMenuRunId = null;
-      actionMenu.open = false;
+      closeRunActionMenus();
       renderAll();
     });
 
@@ -1859,8 +1848,7 @@ function renderGroupDetailsRow(group, columnCount) {
       event.stopPropagation();
       state.trueBaselineOverrideRunId = run.run_id;
       persistTrueBaselineOverride();
-      state.activeRunActionMenuRunId = null;
-      actionMenu.open = false;
+      closeRunActionMenus();
       renderAll();
     });
 
