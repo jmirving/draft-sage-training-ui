@@ -1110,6 +1110,14 @@ function getRunUpdatedAt(run) {
   return parseRunIdTimestamp(run?.run_id);
 }
 
+function closeRunActionMenus(exceptMenu = null) {
+  document.querySelectorAll(".run-action-menu[open]").forEach((menu) => {
+    if (menu !== exceptMenu) {
+      menu.open = false;
+    }
+  });
+}
+
 function getRunsByStatus(status) {
   return getRuns().filter((run) => run?.status === status);
 }
@@ -1743,6 +1751,7 @@ function renderGroupDetailsRow(group, columnCount) {
       tr.classList.add("active");
     }
     tr.addEventListener("click", () => {
+      closeRunActionMenus();
       selectRun(run.run_id);
     });
 
@@ -1789,11 +1798,21 @@ function renderGroupDetailsRow(group, columnCount) {
     actionMenu.addEventListener("click", (event) => {
       event.stopPropagation();
     });
+    actionMenu.addEventListener("toggle", () => {
+      if (actionMenu.open) {
+        closeRunActionMenus(actionMenu);
+      }
+    });
 
     const actionSummary = document.createElement("summary");
     actionSummary.className = "run-action-trigger";
     actionSummary.textContent = "⋮";
     actionSummary.setAttribute("aria-label", "Run actions");
+    actionSummary.addEventListener("click", (event) => {
+      event.stopPropagation();
+      closeRunActionMenus(actionMenu);
+      selectRun(run.run_id);
+    });
     actionMenu.appendChild(actionSummary);
 
     const actionList = document.createElement("div");

@@ -775,6 +775,7 @@ button {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .group-run-table td.group-run-variant {
@@ -784,21 +785,21 @@ button {
 
 .group-run-table th:nth-child(1),
 .group-run-table td:nth-child(1) {
-  width: 52px;
+  width: 44px;
 }
 
 .group-run-table th:nth-child(3),
 .group-run-table td:nth-child(3) {
-  width: 90px;
+  width: 76px;
 }
 
 .group-run-table th:nth-child(4),
 .group-run-table td:nth-child(4) {
-  width: 70px;
+  width: 96px;
 }
 
 .group-run-select {
-  width: 52px;
+  width: 44px;
 }
 
 .group-run-select input {
@@ -819,7 +820,7 @@ button {
 }
 
 .group-run-actions {
-  width: 70px;
+  width: 96px;
   text-align: center;
   vertical-align: middle;
 }
