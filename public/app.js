@@ -861,20 +861,63 @@ function getRunLabel(run, options = {}) {
   return label;
 }
 
-function buildUniqueCompareRunLabels(runs) {
-  const labelCounts = new Map();
+function longestCommonPrefixText(values) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return "";
+  }
+  let prefix = values[0] || "";
+  for (let i = 1; i < values.length; i += 1) {
+    const candidate = values[i] || "";
+    while (prefix && !candidate.toLowerCase().startsWith(prefix.toLowerCase())) {
+      prefix = prefix.slice(0, -1);
+    }
+    if (!prefix) {
+      break;
+    }
+  }
+  return prefix.trim();
+}
+
+function buildUniqueCompareRunLabels(runs, options = {}) {
+  const { variantLabelByRunId = new Map() } = options;
+  const groupLabelsByKey = new Map();
   runs.forEach((run) => {
-    const base = getRunLabel(run, {
-      includeGroup: true
-    });
+    groupLabelsByKey.set(getGroupKey(run), getGroupLabel(run));
+  });
+  const groupEntries = Array.from(groupLabelsByKey.entries());
+  const groupLabelValues = groupEntries.map((entry) => entry[1]);
+  const commonGroupPrefix =
+    groupLabelValues.length > 1 ? longestCommonPrefixText(groupLabelValues) : "";
+  const shortGroupLabels = new Map();
+  groupEntries.forEach(([key, label]) => {
+    let shortLabel = label || "Uncategorized";
+    if (commonGroupPrefix && shortLabel.toLowerCase().startsWith(commonGroupPrefix.toLowerCase())) {
+      shortLabel = shortLabel.slice(commonGroupPrefix.length).replace(/^[\s\-._:]+/, "").trim();
+    }
+    if (!shortLabel) {
+      shortLabel = label || "Uncategorized";
+    }
+    shortGroupLabels.set(key, shortLabel);
+  });
+
+  const labelCounts = new Map();
+  const provisional = new Map();
+  runs.forEach((run) => {
+    const variantLabel =
+      variantLabelByRunId.get(run.run_id) || getRunVariantDeltaLabel(run, { loadIfMissing: true });
+    const groupKey = getGroupKey(run);
+    const uniqueGroupCount = groupLabelsByKey.size;
+    const base =
+      uniqueGroupCount > 1
+        ? `${shortGroupLabels.get(groupKey)} · ${variantLabel}`
+        : variantLabel;
+    provisional.set(run.run_id, base);
     labelCounts.set(base, (labelCounts.get(base) || 0) + 1);
   });
 
   const labels = new Map();
   runs.forEach((run) => {
-    const base = getRunLabel(run, {
-      includeGroup: true
-    });
+    const base = provisional.get(run.run_id) || getRunLabel(run, { includeGroup: true });
     let label = base;
     if ((labelCounts.get(base) || 0) > 1 && run?.run_id) {
       label = `${base} (${run.run_id})`;
@@ -1988,7 +2031,7 @@ function renderWorkspaceKnobTable(compareRuns, configByRunId, runLabelsById = ne
     const th = document.createElement("th");
     th.className = "run-col";
     const label = runLabelsById.get(run.run_id) || getRunLabel(run, { includeGroup: true });
-    th.textContent = shortenLabel(label, 64);
+    th.textContent = label;
     th.title = label;
     headRow.appendChild(th);
   });
@@ -2080,7 +2123,7 @@ function renderWorkspaceSlotTable(compareRuns, summaryByRunId, runLabelsById = n
     const th = document.createElement("th");
     th.className = "run-col";
     const label = runLabelsById.get(run.run_id) || getRunLabel(run, { includeGroup: true });
-    th.textContent = shortenLabel(label, 64);
+    th.textContent = label;
     th.title = label;
     headRow.appendChild(th);
   });
@@ -2186,7 +2229,18 @@ function renderComparisonWorkspace() {
 
   const filteredRuns = getFilteredRuns();
   const compareRuns = getCompareRuns();
-  const compareRunLabelsById = buildUniqueCompareRunLabels(compareRuns);
+  const compareVariantLabelsById = new Map();
+  compareRuns.forEach((run) => {
+    compareVariantLabelsById.set(
+      run.run_id,
+      getRunVariantDeltaLabel(run, {
+        loadIfMissing: true
+      })
+    );
+  });
+  const compareRunLabelsById = buildUniqueCompareRunLabels(compareRuns, {
+    variantLabelByRunId: compareVariantLabelsById
+  });
   const trueBaselineRun = getTrueBaselineRun();
   const trueBaselineConfig = trueBaselineRun ? getRunConfig(trueBaselineRun, true) : null;
   elements.compareCount.textContent = `${compareRuns.length}/${MAX_COMPARE_RUNS} selected`;
@@ -2425,7 +2479,7 @@ function renderComparisonWorkspace() {
       th.className = "run-col";
       const label =
         compareRunLabelsById.get(run.run_id) || getRunLabel(run, { includeGroup: true });
-      th.textContent = shortenLabel(label, 64);
+      th.textContent = label;
       th.title = label;
       headRow.appendChild(th);
     });
