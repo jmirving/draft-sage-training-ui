@@ -1404,13 +1404,14 @@ function renderComparisonTable() {
       if (event.shiftKey || event.metaKey || event.ctrlKey) {
         addCompareRun(runId);
       }
-      if (state.expandedGroupKeys.has(group.key)) {
-        if (state.selectedRunId === runId) {
-          state.expandedGroupKeys.delete(group.key);
-        }
-      } else {
-        state.expandedGroupKeys.add(group.key);
+      const isExpanded = state.expandedGroupKeys.has(group.key);
+      if (isExpanded) {
+        state.expandedGroupKeys.delete(group.key);
+        closeRunActionMenus();
+        renderAll();
+        return;
       }
+      state.expandedGroupKeys.add(group.key);
       selectRun(runId);
     });
     const groupCell = document.createElement("td");
