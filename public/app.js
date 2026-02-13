@@ -826,6 +826,85 @@ function getConfigDerivedVariantLabel(groupRuns, run, referenceRun, runConfig, r
   return `${tokens.slice(0, visibleTokenCount).join(" · ")} +${overflow} more`;
 }
 
+function summarizeKnobTokens(tokens, visibleTokenCount = 3) {
+  if (!Array.isArray(tokens) || tokens.length === 0) {
+    return "";
+  }
+  if (tokens.length <= visibleTokenCount) {
+    return tokens.join(" · ");
+  }
+  const overflow = tokens.length - visibleTokenCount;
+  return `${tokens.slice(0, visibleTokenCount).join(" · ")} +${overflow} more`;
+}
+
+function getRunKnobSignature(run, baselineRun, baselineConfig, options = {}) {
+  const {
+    runConfig = null,
+    loadIfMissing = false,
+    visibleTokenCount = 3
+  } = options;
+
+  if (!run?.run_id) {
+    return {
+      status: "missing",
+      changedCount: 0,
+      text: "—"
+    };
+  }
+  if (!baselineRun) {
+    return {
+      status: "no-baseline",
+      changedCount: 0,
+      text: "No baseline configured"
+    };
+  }
+  if (!baselineConfig) {
+    return {
+      status: "baseline-loading",
+      changedCount: 0,
+      text: "Baseline config loading…"
+    };
+  }
+
+  const selectedConfig = runConfig || getRunConfig(run, loadIfMissing);
+  if (!selectedConfig) {
+    return {
+      status: "run-loading",
+      changedCount: 0,
+      text: "Config loading…"
+    };
+  }
+
+  const diff = buildConfigDiffRows(selectedConfig, baselineConfig);
+  const changedRows = diff.changedRows || [];
+  if (changedRows.length === 0) {
+    if (run.run_id === baselineRun.run_id) {
+      return {
+        status: "baseline",
+        changedCount: 0,
+        text: "Baseline reference"
+      };
+    }
+    return {
+      status: "matching",
+      changedCount: 0,
+      text: "Matches baseline"
+    };
+  }
+
+  const tokens = changedRows.map((row) => {
+    const tokenLabel = getVariantTokenLabel({ key: row.key, label: row.label });
+    const tokenValue = formatConfigValue(row.selectedValue, row.format);
+    return `${tokenLabel}=${tokenValue}`;
+  });
+
+  return {
+    status: "changed",
+    changedCount: changedRows.length,
+    text: summarizeKnobTokens(tokens, visibleTokenCount)
+  };
+}
+
 function getMetricValue(run) {
   const metrics = run?.metrics;
   if (!metrics) {
@@ -952,10 +1031,17 @@ function buildGroupStats(runs) {
 function buildComparisonRows(runs) {
   const baselineToBeat = getBaselineToBeatRun();
   const baselineMetric = baselineToBeat ? getMetricValue(baselineToBeat) : null;
+  const trueBaselineRun = getTrueBaselineRun();
+  const trueBaselineConfig = trueBaselineRun ? getRunConfig(trueBaselineRun, true) : null;
   return Array.from(buildGroupStats(runs).values()).map((group, index) => {
     const referenceRun = getGroupReferenceRun(group.runs);
     const referenceConfig = getRunConfig(referenceRun, true);
     const bestConfig = getRunConfig(group.best, true);
+    const bestKnobSignature = getRunKnobSignature(group.best, trueBaselineRun, trueBaselineConfig, {
+      runConfig: bestConfig,
+      loadIfMissing: true,
+      visibleTokenCount: 3
+    });
     const metricSamples = group.runs
       .map((run) => getMetricValue(run))
       .filter((value) => typeof value === "number" && !Number.isNaN(value));
@@ -977,6 +1063,7 @@ function buildComparisonRows(runs) {
       updatedTs: Number.isNaN(updatedTs) ? Number.NEGATIVE_INFINITY : updatedTs,
       statusLabel: STATUS_LABELS[group.best?.status] || group.best?.status || "—",
       referenceRun,
+      bestKnobSignature,
       bestVariantLabel: getConfigDerivedVariantLabel(
         group.runs,
         group.best,
@@ -1201,10 +1288,13 @@ function renderComparisonTable() {
     row.appendChild(groupCell);
 
     row.appendChild(createCell(String(group.runCount)));
+    const bestVariantSubtitle = group.best
+      ? [getVariantLabel(group.best), group.best?.run_id || ""].filter(Boolean).join(" · ")
+      : "";
     row.appendChild(
       createPrimarySecondaryCell(
-        group.best ? group.bestVariantLabel : "—",
-        group.best?.run_id || ""
+        group.best ? group.bestKnobSignature?.text || group.bestVariantLabel : "—",
+        bestVariantSubtitle
       )
     );
     row.appendChild(
@@ -1370,8 +1460,8 @@ function compareComparisonRows(a, b) {
       break;
     case "variant":
       base = compareNullableStrings(
-        a.bestVariantLabel || "",
-        b.bestVariantLabel || ""
+        a.bestKnobSignature?.text || a.bestVariantLabel || "",
+        b.bestKnobSignature?.text || b.bestVariantLabel || ""
       );
       break;
     case "runs":
@@ -1436,6 +1526,8 @@ function renderGroupDetailsRow(group, columnCount) {
   const tbody = document.createElement("tbody");
   const referenceRun = getGroupReferenceRun(group.runs);
   const referenceConfig = getRunConfig(referenceRun, true);
+  const trueBaselineRun = getTrueBaselineRun();
+  const trueBaselineConfig = trueBaselineRun ? getRunConfig(trueBaselineRun, true) : null;
   const sortedRuns = group.runs
     .slice()
     .map((run, index) => {
@@ -1469,6 +1561,11 @@ function renderGroupDetailsRow(group, columnCount) {
   sortedRuns.forEach((entry) => {
     const run = entry.run;
     const runConfig = getRunConfig(run, true);
+    const runKnobSignature = getRunKnobSignature(run, trueBaselineRun, trueBaselineConfig, {
+      runConfig,
+      loadIfMissing: true,
+      visibleTokenCount: 3
+    });
     const variantLabel = getConfigDerivedVariantLabel(
       group.runs,
       run,
@@ -1482,13 +1579,13 @@ function renderGroupDetailsRow(group, columnCount) {
     variantCell.className = "group-run-variant";
     const variantPrimary = document.createElement("span");
     variantPrimary.className = "table-primary";
-    variantPrimary.textContent = variantLabel;
-    variantPrimary.title = getVariantRawLabel(run);
+    variantPrimary.textContent = runKnobSignature.text;
+    variantPrimary.title = `${getVariantRawLabel(run)} | ${runKnobSignature.text}`;
     const variantSecondary = document.createElement("span");
     variantSecondary.className = "table-secondary";
-    variantSecondary.textContent = run.run_id || "";
+    variantSecondary.textContent = [variantLabel, run.run_id || ""].filter(Boolean).join(" · ");
     variantCell.appendChild(variantPrimary);
-    if (run.run_id) {
+    if (variantSecondary.textContent) {
       variantCell.appendChild(variantSecondary);
     }
     tr.appendChild(variantCell);
@@ -1660,6 +1757,8 @@ function renderComparisonWorkspace() {
 
   const filteredRuns = getFilteredRuns();
   const compareRuns = getCompareRuns();
+  const trueBaselineRun = getTrueBaselineRun();
+  const trueBaselineConfig = trueBaselineRun ? getRunConfig(trueBaselineRun, true) : null;
   elements.compareCount.textContent = `${compareRuns.length}/${MAX_COMPARE_RUNS} selected`;
   elements.compareAddSelected.disabled = !state.selectedRunId;
   elements.compareClear.disabled = compareRuns.length === 0;
@@ -1686,6 +1785,10 @@ function renderComparisonWorkspace() {
   }
 
   compareRuns.forEach((run) => {
+    const chipKnobSignature = getRunKnobSignature(run, trueBaselineRun, trueBaselineConfig, {
+      loadIfMissing: true,
+      visibleTokenCount: 2
+    });
     const chip = document.createElement("div");
     chip.className = "compare-chip";
     if (run.run_id === state.selectedRunId) {
@@ -1695,8 +1798,8 @@ function renderComparisonWorkspace() {
 
     const label = document.createElement("span");
     label.className = "compare-chip-label";
-    label.textContent = shortenLabel(getVariantLabel(run), 28);
-    label.title = getVariantLabel(run);
+    label.textContent = shortenLabel(chipKnobSignature.text, 34);
+    label.title = `${getVariantLabel(run)} | ${chipKnobSignature.text}`;
 
     const remove = document.createElement("button");
     remove.type = "button";
@@ -1736,25 +1839,9 @@ function renderComparisonWorkspace() {
 
   clearCompareState();
 
-  const trueBaselineRun = getTrueBaselineRun();
   const targetRun = getBaselineToBeatRun();
   const baselineMetric = trueBaselineRun ? getMetricValue(trueBaselineRun) : null;
   const targetMetric = targetRun ? getMetricValue(targetRun) : null;
-
-  let baselineConfig = null;
-  if (trueBaselineRun) {
-    const baselineSummaryEntry = ensureSummaryEntry(trueBaselineRun);
-    if (baselineSummaryEntry) {
-      const baselineConfigState = resolveConfigState(
-        trueBaselineRun.run_id,
-        baselineSummaryEntry,
-        baselineSummaryEntry?.data?.paths?.config
-      );
-      if (baselineConfigState.status === "ready") {
-        baselineConfig = baselineConfigState.data;
-      }
-    }
-  }
 
   const configByRunId = new Map();
   let configReady = true;
@@ -1779,27 +1866,34 @@ function renderComparisonWorkspace() {
     const deltaVsBaseline = computeDelta(metricValue, baselineMetric);
     const deltaVsTarget = computeDelta(metricValue, targetMetric);
 
-    let knobSummary = "Config not loaded";
+    let runConfig = null;
     if (summaryEntry?.data?.paths?.config) {
       const configState = resolveConfigState(run.run_id, summaryEntry, summaryEntry.data.paths.config);
       if (configState.status === "ready") {
-        configByRunId.set(run.run_id, configState.data);
-        if (baselineConfig) {
-          const diff = buildConfigDiffRows(configState.data, baselineConfig);
-          knobSummary = `${diff.changedRows.length} knob changes vs baseline`;
-        } else {
-          knobSummary = "Config ready";
-        }
+        runConfig = configState.data;
+        configByRunId.set(run.run_id, runConfig);
       } else if (configState.status === "error") {
         configReady = false;
         configError = configState.message;
-        knobSummary = "Config error";
       } else {
         configReady = false;
-        knobSummary = "Config loading…";
       }
     } else {
       configReady = false;
+    }
+
+    const runKnobSignature = getRunKnobSignature(run, trueBaselineRun, trueBaselineConfig, {
+      runConfig,
+      loadIfMissing: true,
+      visibleTokenCount: 4
+    });
+    let knobSummary = runKnobSignature.text;
+    if (runKnobSignature.status === "changed") {
+      knobSummary = `${runKnobSignature.changedCount} knob changes vs baseline: ${runKnobSignature.text}`;
+    } else if (runKnobSignature.status === "matching") {
+      knobSummary = "Matches baseline (0 changes)";
+    } else if (runKnobSignature.status === "baseline") {
+      knobSummary = "Baseline reference (0 changes)";
     }
 
     const card = document.createElement("article");
@@ -1817,8 +1911,8 @@ function renderComparisonWorkspace() {
     const cardHeader = document.createElement("div");
     cardHeader.className = "compare-matrix-header";
     const title = document.createElement("h4");
-    title.textContent = shortenLabel(getVariantLabel(run), 38);
-    title.title = getVariantLabel(run);
+    title.textContent = shortenLabel(runKnobSignature.text, 42);
+    title.title = `${getVariantLabel(run)} | ${runKnobSignature.text}`;
     const status = document.createElement("span");
     status.className = `status-badge status-${run.status || "planned"}`;
     status.textContent = STATUS_LABELS[run.status] || run.status || "—";
@@ -1827,7 +1921,7 @@ function renderComparisonWorkspace() {
 
     const subtitle = document.createElement("p");
     subtitle.className = "muted";
-    subtitle.textContent = `${getGroupLabel(run)} · ${run.run_id}`;
+    subtitle.textContent = `${getGroupLabel(run)} · ${getVariantLabel(run)} · ${run.run_id}`;
 
     const metrics = document.createElement("div");
     metrics.className = "compare-matrix-metrics";
