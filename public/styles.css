@@ -506,7 +506,7 @@ button {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.84rem;
-  table-layout: auto;
+  table-layout: fixed;
 }
 
 .compare-knob-table th,
@@ -526,15 +526,12 @@ button {
 
 .compare-knob-table th:first-child,
 .compare-knob-table td.knob-label {
-  width: 42%;
-  min-width: 280px;
   font-weight: 600;
   text-align: left;
 }
 
 .compare-knob-table th:not(:first-child),
 .compare-knob-table td:not(.knob-label) {
-  min-width: 140px;
   text-align: center;
   vertical-align: middle;
   overflow-wrap: anywhere;
@@ -554,7 +551,7 @@ button {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.84rem;
-  table-layout: auto;
+  table-layout: fixed;
 }
 
 .compare-slot-table th,
@@ -574,14 +571,11 @@ button {
 
 .compare-slot-table th:first-child,
 .compare-slot-table td.slot-label {
-  width: 30%;
-  min-width: 220px;
   font-weight: 600;
 }
 
 .compare-slot-table th:not(:first-child),
 .compare-slot-table td:not(.slot-label) {
-  min-width: 150px;
   text-align: center;
 }
 
@@ -610,6 +604,30 @@ button {
   color: var(--muted);
   letter-spacing: 0.03em;
   line-height: 1.25;
+}
+
+.compare-slot-table td.compare-slot-value.delta-baseline {
+  background: rgba(217, 108, 61, 0.08);
+}
+
+.compare-slot-table td.compare-slot-value.delta-positive {
+  background: rgba(47, 125, 75, 0.09);
+}
+
+.compare-slot-table td.compare-slot-value.delta-negative {
+  background: rgba(179, 58, 53, 0.09);
+}
+
+.compare-slot-table td.compare-slot-value.delta-neutral {
+  background: rgba(25, 24, 23, 0.04);
+}
+
+.compare-slot-table td.compare-slot-value.delta-positive .compare-slot-value-meta {
+  color: var(--ok);
+}
+
+.compare-slot-table td.compare-slot-value.delta-negative .compare-slot-value-meta {
+  color: var(--bad);
 }
 
 .panel-header {

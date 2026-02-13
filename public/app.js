@@ -260,8 +260,10 @@ const elements = {
   compareClear: document.getElementById("compare-clear"),
   compareSelected: document.getElementById("compare-selected"),
   compareMatrix: document.getElementById("compare-matrix"),
+  compareKnobTable: document.getElementById("compare-knob-table"),
   compareKnobHead: document.getElementById("compare-knob-head"),
   compareKnobBody: document.getElementById("compare-knob-body"),
+  compareSlotTable: document.getElementById("compare-slot-table"),
   compareSlotHead: document.getElementById("compare-slot-head"),
   compareSlotBody: document.getElementById("compare-slot-body"),
   detailState: document.getElementById("detail-state"),
@@ -857,6 +859,29 @@ function getRunLabel(run, options = {}) {
     label = `${label} (${run.run_id})`;
   }
   return label;
+}
+
+function buildUniqueCompareRunLabels(runs) {
+  const labelCounts = new Map();
+  runs.forEach((run) => {
+    const base = getRunLabel(run, {
+      includeGroup: true
+    });
+    labelCounts.set(base, (labelCounts.get(base) || 0) + 1);
+  });
+
+  const labels = new Map();
+  runs.forEach((run) => {
+    const base = getRunLabel(run, {
+      includeGroup: true
+    });
+    let label = base;
+    if ((labelCounts.get(base) || 0) > 1 && run?.run_id) {
+      label = `${base} (${run.run_id})`;
+    }
+    labels.set(run.run_id, label);
+  });
+  return labels;
 }
 
 function getGroupReferenceRun(groupKey, runs) {
@@ -1930,9 +1955,33 @@ function buildWorkspaceKnobRows(compareRuns, configByRunId) {
   });
 }
 
-function renderWorkspaceKnobTable(compareRuns, configByRunId) {
+function applyWorkspaceTableColgroup(tableElement, runCount, firstColumnPercent) {
+  if (!tableElement) {
+    return;
+  }
+  const existing = tableElement.querySelector("colgroup");
+  if (existing) {
+    existing.remove();
+  }
+  const colgroup = document.createElement("colgroup");
+  const firstCol = document.createElement("col");
+  firstCol.style.width = `${firstColumnPercent}%`;
+  colgroup.appendChild(firstCol);
+
+  const remainingColumns = Math.max(1, runCount);
+  const runWidth = (100 - firstColumnPercent) / remainingColumns;
+  for (let i = 0; i < runCount; i += 1) {
+    const col = document.createElement("col");
+    col.style.width = `${runWidth}%`;
+    colgroup.appendChild(col);
+  }
+  tableElement.prepend(colgroup);
+}
+
+function renderWorkspaceKnobTable(compareRuns, configByRunId, runLabelsById = new Map()) {
   elements.compareKnobHead.innerHTML = "";
   elements.compareKnobBody.innerHTML = "";
+  applyWorkspaceTableColgroup(elements.compareKnobTable, compareRuns.length, 42);
 
   const headRow = document.createElement("tr");
   const knobHeader = document.createElement("th");
@@ -1940,12 +1989,9 @@ function renderWorkspaceKnobTable(compareRuns, configByRunId) {
   headRow.appendChild(knobHeader);
   compareRuns.forEach((run) => {
     const th = document.createElement("th");
-    th.textContent = shortenLabel(
-      getRunVariantDeltaLabel(run, {
-        loadIfMissing: true
-      }),
-      26
-    );
+    const label = runLabelsById.get(run.run_id) || getRunLabel(run, { includeGroup: true });
+    th.textContent = shortenLabel(label, 30);
+    th.title = label;
     headRow.appendChild(th);
   });
   elements.compareKnobHead.appendChild(headRow);
@@ -2022,10 +2068,11 @@ function buildWorkspaceSlotRows(compareRuns, summaryByRunId) {
   });
 }
 
-function renderWorkspaceSlotTable(compareRuns, summaryByRunId, options = {}) {
+function renderWorkspaceSlotTable(compareRuns, summaryByRunId, runLabelsById = new Map(), options = {}) {
   const { loading = false } = options;
   elements.compareSlotHead.innerHTML = "";
   elements.compareSlotBody.innerHTML = "";
+  applyWorkspaceTableColgroup(elements.compareSlotTable, compareRuns.length, 30);
 
   const headRow = document.createElement("tr");
   const slotHeader = document.createElement("th");
@@ -2033,12 +2080,9 @@ function renderWorkspaceSlotTable(compareRuns, summaryByRunId, options = {}) {
   headRow.appendChild(slotHeader);
   compareRuns.forEach((run) => {
     const th = document.createElement("th");
-    th.textContent = shortenLabel(
-      getRunVariantDeltaLabel(run, {
-        loadIfMissing: true
-      }),
-      26
-    );
+    const label = runLabelsById.get(run.run_id) || getRunLabel(run, { includeGroup: true });
+    th.textContent = shortenLabel(label, 30);
+    th.title = label;
     headRow.appendChild(th);
   });
   elements.compareSlotHead.appendChild(headRow);
@@ -2087,6 +2131,7 @@ function renderWorkspaceSlotTable(compareRuns, summaryByRunId, options = {}) {
 
     compareRuns.forEach((run) => {
       const valueCell = document.createElement("td");
+      valueCell.className = "compare-slot-value";
       const row = slotEntry.values.get(run.run_id);
       if (!row) {
         valueCell.textContent = "—";
@@ -2109,10 +2154,19 @@ function renderWorkspaceSlotTable(compareRuns, summaryByRunId, options = {}) {
       const meta = document.createElement("span");
       meta.className = "compare-slot-value-meta";
       if (run.run_id === baselineRunId) {
+        valueCell.classList.add("delta-baseline");
         meta.textContent = `${countsText} · baseline`;
       } else if (delta !== null) {
+        if (delta > 0.002) {
+          valueCell.classList.add("delta-positive");
+        } else if (delta < -0.002) {
+          valueCell.classList.add("delta-negative");
+        } else {
+          valueCell.classList.add("delta-neutral");
+        }
         meta.textContent = `${countsText} · Δ ${formatDelta(delta, 3)}`;
       } else {
+        valueCell.classList.add("delta-neutral");
         meta.textContent = countsText;
       }
       valueCell.appendChild(meta);
@@ -2133,6 +2187,7 @@ function renderComparisonWorkspace() {
 
   const filteredRuns = getFilteredRuns();
   const compareRuns = getCompareRuns();
+  const compareRunLabelsById = buildUniqueCompareRunLabels(compareRuns);
   const trueBaselineRun = getTrueBaselineRun();
   const trueBaselineConfig = trueBaselineRun ? getRunConfig(trueBaselineRun, true) : null;
   elements.compareCount.textContent = `${compareRuns.length}/${MAX_COMPARE_RUNS} selected`;
@@ -2148,9 +2203,13 @@ function renderComparisonWorkspace() {
     const option = document.createElement("option");
     option.value = run.run_id;
     const metricValue = getMetricValue(run);
-    option.textContent = `${shortenLabel(getVariantLabel(run), 34)} · ${
+    const optionLabel = getRunLabel(run, {
+      includeGroup: true
+    });
+    option.textContent = `${shortenLabel(optionLabel, 42)} · ${
       metricValue !== null ? formatNumber(metricValue) : "—"
     }`;
+    option.title = optionLabel;
     elements.compareRunPicker.appendChild(option);
   });
   elements.compareAddPicker.disabled = pickerRuns.length === 0;
@@ -2161,9 +2220,8 @@ function renderComparisonWorkspace() {
   }
 
   compareRuns.forEach((run) => {
-    const variantDeltaLabel = getRunVariantDeltaLabel(run, {
-      loadIfMissing: true
-    });
+    const runLabel =
+      compareRunLabelsById.get(run.run_id) || getRunLabel(run, { includeGroup: true });
     const chip = document.createElement("div");
     chip.className = "compare-chip";
     if (run.run_id === state.selectedRunId) {
@@ -2173,14 +2231,14 @@ function renderComparisonWorkspace() {
 
     const label = document.createElement("span");
     label.className = "compare-chip-label";
-    label.textContent = shortenLabel(variantDeltaLabel, 34);
-    label.title = `${getVariantLabel(run)} | ${variantDeltaLabel}`;
+    label.textContent = shortenLabel(runLabel, 42);
+    label.title = runLabel;
 
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "compare-chip-remove";
     remove.textContent = "x";
-    remove.title = `Remove ${getVariantLabel(run)} from compare`;
+    remove.title = `Remove ${runLabel} from compare`;
     remove.addEventListener("click", (event) => {
       event.stopPropagation();
       removeCompareRun(run.run_id);
@@ -2268,6 +2326,8 @@ function renderComparisonWorkspace() {
       loadIfMissing: true,
       visibleTokenCount: 4
     });
+    const runDisplayLabel =
+      compareRunLabelsById.get(run.run_id) || getRunLabel(run, { includeGroup: true });
     const variantDeltaLabel = getRunVariantDeltaLabel(run, {
       runConfig,
       loadIfMissing: true
@@ -2296,8 +2356,8 @@ function renderComparisonWorkspace() {
     const cardHeader = document.createElement("div");
     cardHeader.className = "compare-matrix-header";
     const title = document.createElement("h4");
-    title.textContent = shortenLabel(variantDeltaLabel, 42);
-    title.title = `${getVariantLabel(run)} | ${variantDeltaLabel}`;
+    title.textContent = shortenLabel(runDisplayLabel, 56);
+    title.title = runDisplayLabel;
     const status = document.createElement("span");
     status.className = `status-badge status-${run.status || "planned"}`;
     status.textContent = STATUS_LABELS[run.status] || run.status || "—";
@@ -2306,7 +2366,7 @@ function renderComparisonWorkspace() {
 
     const subtitle = document.createElement("p");
     subtitle.className = "muted";
-    subtitle.textContent = `${getGroupLabel(run)} · ${getVariantLabel(run)}`;
+    subtitle.textContent = variantDeltaLabel;
 
     const metrics = document.createElement("div");
     metrics.className = "compare-matrix-metrics";
@@ -2349,25 +2409,24 @@ function renderComparisonWorkspace() {
     }
   }
 
-  renderWorkspaceSlotTable(compareRuns, summaryByRunId, {
+  renderWorkspaceSlotTable(compareRuns, summaryByRunId, compareRunLabelsById, {
     loading: !summaryReady
   });
 
   if (configByRunId.size === compareRuns.length) {
-    renderWorkspaceKnobTable(compareRuns, configByRunId);
+    renderWorkspaceKnobTable(compareRuns, configByRunId, compareRunLabelsById);
   } else {
+    applyWorkspaceTableColgroup(elements.compareKnobTable, compareRuns.length, 42);
     const headRow = document.createElement("tr");
     const knobHeader = document.createElement("th");
     knobHeader.textContent = "Knob";
     headRow.appendChild(knobHeader);
     compareRuns.forEach((run) => {
       const th = document.createElement("th");
-      th.textContent = shortenLabel(
-        getRunVariantDeltaLabel(run, {
-          loadIfMissing: true
-        }),
-        26
-      );
+      const label =
+        compareRunLabelsById.get(run.run_id) || getRunLabel(run, { includeGroup: true });
+      th.textContent = shortenLabel(label, 30);
+      th.title = label;
       headRow.appendChild(th);
     });
     elements.compareKnobHead.appendChild(headRow);
