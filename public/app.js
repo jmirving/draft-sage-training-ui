@@ -238,10 +238,11 @@ const elements = {
   groupFilter: document.getElementById("group-filter"),
   metricFilter: document.getElementById("metric-filter"),
   runningCount: document.getElementById("running-count"),
-  runningNow: document.getElementById("running-now"),
-  trueBaseline: document.getElementById("true-baseline"),
-  baselineToBeat: document.getElementById("baseline-to-beat"),
-  nextDecision: document.getElementById("next-decision"),
+  summaryRunning: document.getElementById("summary-running"),
+  summaryTrueBaseline: document.getElementById("summary-true-baseline"),
+  summaryTrueBaselineMeta: document.getElementById("summary-true-baseline-meta"),
+  summaryCompareSelected: document.getElementById("summary-compare-selected"),
+  summaryMetric: document.getElementById("summary-metric"),
   tableCount: document.getElementById("table-count"),
   tableState: document.getElementById("table-state"),
   groupSpread: document.getElementById("group-spread"),
@@ -839,6 +840,23 @@ function getVariantLabel(run) {
   return cleaned || humanized;
 }
 
+function getRunLabel(run, options = {}) {
+  const { includeGroup = false, includeRunId = false } = options;
+  if (!run) {
+    return "—";
+  }
+  const variant = getVariantLabel(run);
+  const group = includeGroup ? getGroupLabel(run) : null;
+  let label = [group, variant].filter(Boolean).join(" · ");
+  if (!label) {
+    label = variant || "—";
+  }
+  if (includeRunId && run?.run_id) {
+    label = `${label} (${run.run_id})`;
+  }
+  return label;
+}
+
 function getGroupReferenceRun(groupKey, runs) {
   if (!Array.isArray(runs) || runs.length === 0) {
     return null;
@@ -1256,106 +1274,77 @@ function getBaselineToBeatRun() {
   return getBestRunByMetric(getRuns());
 }
 
+function getNextDecisionCue(runs = getRuns()) {
+  const baselineToBeat = getBaselineToBeatRun();
+  if (!baselineToBeat) {
+    return null;
+  }
+
+  const baselineMetric = getMetricValue(baselineToBeat);
+  const candidates = runs.filter(
+    (run) => run?.category !== "baseline" && run?.run_id !== baselineToBeat.run_id
+  );
+  const challenger = getBestRunByMetric(candidates);
+  if (!challenger) {
+    return null;
+  }
+
+  const challengerMetric = getMetricValue(challenger);
+  const delta = computeDelta(challengerMetric, baselineMetric);
+  const label = delta !== null && delta > 0 ? "New leader" : "Closest challenger";
+  return {
+    baselineToBeat,
+    challenger,
+    challengerMetric,
+    delta,
+    label
+  };
+}
+
 function renderDecisionCards() {
   const runs = getRuns();
-  const running = runs.filter((run) => run?.status === "running");
-  elements.runningCount.textContent = running.length.toString();
-  elements.runningNow.innerHTML = "";
-  const runningCard = elements.runningNow.closest(".decision-card");
-  if (runningCard) {
-    runningCard.classList.toggle("is-empty", running.length === 0);
-  }
-  if (running.length === 0) {
-    elements.runningNow.innerHTML =
-      '<div class="decision-item decision-item-inline"><span class="decision-title">Queue clear</span></div>';
+  const runningRuns = runs.filter((run) => run?.status === "running");
+  elements.runningCount.textContent = runningRuns.length.toString();
+
+  if (runningRuns.length === 0) {
+    elements.summaryRunning.textContent = "Queue clear";
+    elements.summaryRunning.title = "Queue clear";
   } else {
-    running.slice(0, 3).forEach((run) => {
-      elements.runningNow.appendChild(renderDecisionItem(run, true));
-    });
+    const sample = runningRuns
+      .slice(0, 2)
+      .map((run) => getRunLabel(run))
+      .join(" • ");
+    const suffix = runningRuns.length > 2 ? ` +${runningRuns.length - 2} more` : "";
+    const text = `${runningRuns.length} active: ${sample}${suffix}`;
+    elements.summaryRunning.textContent = text;
+    elements.summaryRunning.title = text;
   }
 
   const trueBaseline = getTrueBaselineRun();
-  elements.trueBaseline.innerHTML = "";
-  if (trueBaseline) {
-    elements.trueBaseline.appendChild(renderDecisionItem(trueBaseline, false, true));
+  if (!trueBaseline) {
+    elements.summaryTrueBaseline.textContent = "Not set";
+    elements.summaryTrueBaseline.title = "Not set";
+    elements.summaryTrueBaseline.classList.add("is-disabled");
+    elements.summaryTrueBaselineMeta.textContent = "Set via run actions.";
   } else {
-    elements.trueBaseline.innerHTML =
-      '<div class="decision-item"><span class="decision-title">Not set</span><span class="decision-meta">Add a baseline run.</span></div>';
+    const baselineLabel = getRunLabel(trueBaseline, {
+      includeGroup: true
+    });
+    elements.summaryTrueBaseline.textContent = baselineLabel;
+    elements.summaryTrueBaseline.title = baselineLabel;
+    elements.summaryTrueBaseline.classList.remove("is-disabled");
+    elements.summaryTrueBaselineMeta.textContent = `${getMetricLabel()}: ${formatNumber(
+      getMetricValue(trueBaseline)
+    )} | run ${trueBaseline.run_id || "—"}`;
   }
 
-  const baselineToBeat = getBaselineToBeatRun();
-  elements.baselineToBeat.innerHTML = "";
-  if (baselineToBeat) {
-    elements.baselineToBeat.appendChild(
-      renderDecisionItem(baselineToBeat, false, false)
-    );
-  } else {
-    elements.baselineToBeat.innerHTML =
-      '<div class="decision-item"><span class="decision-title">Not set</span><span class="decision-meta">Pick a target run.</span></div>';
-  }
+  const selectedCount = state.compareRunIds.length;
+  elements.summaryCompareSelected.textContent =
+    selectedCount === 1 ? "1 selected run" : `${selectedCount} selected runs`;
+  elements.summaryCompareSelected.title = elements.summaryCompareSelected.textContent;
+  elements.summaryCompareSelected.classList.toggle("is-disabled", selectedCount === 0);
 
-  elements.nextDecision.innerHTML = "";
-  const baselineMetric = baselineToBeat ? getMetricValue(baselineToBeat) : null;
-  const candidates = runs.filter((run) => run?.category !== "baseline");
-  const bestChallenger = getBestRunByMetric(candidates);
-  if (!baselineToBeat || !bestChallenger) {
-    elements.nextDecision.innerHTML =
-      '<div class="decision-item"><span class="decision-title">Waiting on data</span><span class="decision-meta">Run a comparison to get a cue.</span></div>';
-  } else {
-    const challengerMetric = getMetricValue(bestChallenger);
-    const delta = computeDelta(challengerMetric, baselineMetric);
-    const label = delta !== null && delta > 0 ? "New leader" : "Closest challenger";
-    const item = document.createElement("div");
-    item.className = "decision-item";
-
-    const title = document.createElement("span");
-    title.className = "decision-title";
-    title.textContent = `${label}: ${getVariantLabel(bestChallenger)}`;
-    title.title = getVariantRawLabel(bestChallenger);
-
-    const meta = document.createElement("span");
-    meta.className = "decision-meta";
-    const metricText =
-      challengerMetric !== null
-        ? `${getMetricLabel()}: ${formatNumber(challengerMetric)}`
-        : `${getMetricLabel()}: —`;
-    const deltaText =
-      delta !== null ? `Delta vs target: ${formatDelta(delta)}` : "Delta vs target: —";
-    meta.textContent = `${metricText} | ${deltaText}`;
-
-    item.appendChild(title);
-    item.appendChild(meta);
-    item.addEventListener("click", () => selectRun(bestChallenger.run_id));
-    elements.nextDecision.appendChild(item);
-  }
-}
-
-function renderDecisionItem(run, includeProgress, showDataset) {
-  const item = document.createElement("div");
-  item.className = "decision-item";
-
-  const title = document.createElement("span");
-  title.className = "decision-title";
-  title.textContent = getVariantLabel(run);
-  title.title = getVariantRawLabel(run);
-
-  const meta = document.createElement("span");
-  meta.className = "decision-meta";
-  const metricValue = getMetricValue(run);
-  const metricText =
-    metricValue !== null
-      ? `${getMetricLabel()}: ${formatNumber(metricValue)}`
-      : `${getMetricLabel()}: —`;
-  const datasetLabel = showDataset ? run?.dataset?.label || "—" : getGroupLabel(run);
-  const summary = getCachedSummary(run?.run_id);
-  const progress = includeProgress ? formatProgress(summary) : null;
-  const progressText = includeProgress ? `Progress: ${progress}` : null;
-  meta.textContent = [metricText, datasetLabel, progressText].filter(Boolean).join(" | ");
-
-  item.appendChild(title);
-  item.appendChild(meta);
-  item.addEventListener("click", () => selectRun(run.run_id));
-  return item;
+  elements.summaryMetric.textContent = getMetricLabel();
 }
 
 function renderComparisonTable() {
@@ -2244,6 +2233,118 @@ function renderComparisonWorkspace() {
   }
 }
 
+function renderDecisionContextItem(title, label, metaText, onClick = null) {
+  const item = document.createElement("article");
+  item.className = "decision-context-item";
+
+  const heading = document.createElement("h5");
+  heading.textContent = title;
+  item.appendChild(heading);
+
+  const labelEl = document.createElement("p");
+  labelEl.className = "decision-context-title";
+  labelEl.textContent = label;
+  labelEl.title = label;
+  item.appendChild(labelEl);
+
+  if (metaText) {
+    const meta = document.createElement("p");
+    meta.className = "decision-context-meta";
+    meta.textContent = metaText;
+    item.appendChild(meta);
+  }
+
+  if (onClick) {
+    item.style.cursor = "pointer";
+    item.addEventListener("click", onClick);
+  }
+
+  return item;
+}
+
+function renderDecisionContextSection(selectedRun) {
+  const section = document.createElement("details");
+  section.className = "decision-context";
+
+  const summary = document.createElement("summary");
+  summary.textContent = "Decision context";
+  section.appendChild(summary);
+
+  const body = document.createElement("div");
+  body.className = "decision-context-body";
+
+  const trueBaseline = getTrueBaselineRun();
+  if (trueBaseline) {
+    const baselineMetric = getMetricValue(trueBaseline);
+    body.appendChild(
+      renderDecisionContextItem(
+        "True baseline",
+        getRunLabel(trueBaseline, { includeGroup: true }),
+        `${getMetricLabel()}: ${formatNumber(baselineMetric)} | run ${trueBaseline.run_id || "—"}`,
+        () => selectRun(trueBaseline.run_id)
+      )
+    );
+  } else {
+    body.appendChild(
+      renderDecisionContextItem(
+        "True baseline",
+        "Not set",
+        "Set from a run row actions menu."
+      )
+    );
+  }
+
+  const baselineToBeat = getBaselineToBeatRun();
+  if (baselineToBeat) {
+    const baselineMetric = getMetricValue(baselineToBeat);
+    const selectedMetric = getMetricValue(selectedRun);
+    const delta = computeDelta(selectedMetric, baselineMetric);
+    const deltaText = delta !== null ? formatDelta(delta) : "—";
+    body.appendChild(
+      renderDecisionContextItem(
+        "Baseline to beat",
+        getRunLabel(baselineToBeat, { includeGroup: true }),
+        `${getMetricLabel()}: ${formatNumber(baselineMetric)} | Delta vs selected: ${deltaText}`,
+        () => selectRun(baselineToBeat.run_id)
+      )
+    );
+  } else {
+    body.appendChild(
+      renderDecisionContextItem(
+        "Baseline to beat",
+        "Not set",
+        "Add a target run to compute deltas."
+      )
+    );
+  }
+
+  const cue = getNextDecisionCue(getRuns());
+  if (cue) {
+    const metricText =
+      cue.challengerMetric !== null ? formatNumber(cue.challengerMetric) : "—";
+    const deltaText = cue.delta !== null ? formatDelta(cue.delta) : "—";
+    body.appendChild(
+      renderDecisionContextItem(
+        "Suggested next test",
+        `${cue.label}: ${getRunLabel(cue.challenger, { includeGroup: true })}`,
+        `${getMetricLabel()}: ${metricText} | Delta vs target: ${deltaText}`,
+        () => selectRun(cue.challenger.run_id)
+      )
+    );
+  } else {
+    body.appendChild(
+      renderDecisionContextItem(
+        "Suggested next test",
+        "No challenger yet",
+        "Need at least one non-target run to compare."
+      )
+    );
+  }
+
+  section.appendChild(body);
+  return section;
+}
+
 function renderDetail() {
   const runs = getFilteredRuns();
   const selectedRun = runs.find((run) => run.run_id === state.selectedRunId);
@@ -2399,6 +2500,7 @@ function renderDetail() {
   elements.detailBody.appendChild(detailGrid);
   elements.detailBody.appendChild(metrics);
   elements.detailBody.appendChild(comparison);
+  elements.detailBody.appendChild(renderDecisionContextSection(selectedRun));
   elements.detailBody.appendChild(renderConfigDiffSection(selectedRun, summaryEntry));
   elements.detailBody.appendChild(renderPerSlotSection(summary, selectedRun.run_id));
   elements.detailBody.appendChild(artifacts);
@@ -2467,7 +2569,7 @@ function renderConfigDiffSection(selectedRun, selectedSummaryEntry) {
 
   const context = document.createElement("p");
   context.className = "muted";
-  context.textContent = `Baseline: ${getVariantLabel(baselineRun)}`;
+  context.textContent = `Baseline: ${getRunLabel(baselineRun, { includeGroup: true })}`;
   body.appendChild(context);
 
   let baselineSummaryEntry = null;
@@ -4125,6 +4227,20 @@ async function refreshIndex() {
 }
 
 function attachEventHandlers() {
+  elements.summaryTrueBaseline.addEventListener("click", () => {
+    const baselineRun = getTrueBaselineRun();
+    if (!baselineRun) {
+      return;
+    }
+    selectRun(baselineRun.run_id);
+  });
+
+  elements.summaryCompareSelected.addEventListener("click", () => {
+    setCompareWorkspaceVisible(true, {
+      scroll: true
+    });
+  });
+
   elements.statusFilter.addEventListener("change", (event) => {
     state.statusFilter = event.target.value;
     syncSelection();

@@ -37,35 +37,29 @@
         </div>
       </header>
 
-      <section class="decision-row">
-        <section class="panel decision-card">
-          <div class="panel-header">
-            <h2>Running now</h2>
+      <section class="panel summary-strip" aria-label="Global summary">
+        <div class="summary-chip">
+          <span class="summary-chip-label">Running</span>
+          <div class="summary-chip-main">
             <span id="running-count" class="pill">0</span>
+            <span id="summary-running" class="summary-chip-value">Queue clear</span>
           </div>
-          <div id="running-now" class="decision-body"></div>
-        </section>
-        <section class="panel decision-card">
-          <div class="panel-header">
-            <h2>True baseline</h2>
-            <span class="pill muted-pill">Pinned</span>
-          </div>
-          <div id="true-baseline" class="decision-body"></div>
-        </section>
-        <section class="panel decision-card">
-          <div class="panel-header">
-            <h2>Baseline to beat</h2>
-            <span class="pill muted-pill">Target</span>
-          </div>
-          <div id="baseline-to-beat" class="decision-body"></div>
-        </section>
-        <section class="panel decision-card">
-          <div class="panel-header">
-            <h2>Next decision</h2>
-            <span class="pill muted-pill">Cue</span>
-          </div>
-          <div id="next-decision" class="decision-body"></div>
-        </section>
+        </div>
+        <div class="summary-chip">
+          <span class="summary-chip-label">True baseline</span>
+          <button id="summary-true-baseline" type="button" class="summary-chip-link">Not set</button>
+          <span id="summary-true-baseline-meta" class="summary-chip-meta">Set via run actions.</span>
+        </div>
+        <div class="summary-chip">
+          <span class="summary-chip-label">Compare selected</span>
+          <button id="summary-compare-selected" type="button" class="summary-chip-link">0 selected runs</button>
+          <span class="summary-chip-meta">Open comparison workspace.</span>
+        </div>
+        <div class="summary-chip">
+          <span class="summary-chip-label">Metric</span>
+          <span id="summary-metric" class="summary-chip-value">Accuracy</span>
+          <span class="summary-chip-meta">Used for ranking and deltas.</span>
+        </div>
       </section>
 
       <section class="panel controls-bar">
