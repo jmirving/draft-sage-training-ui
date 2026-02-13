@@ -783,13 +783,18 @@ button {
   white-space: nowrap;
 }
 
-.group-run-open {
+.group-run-open,
+.group-run-baseline {
   border: 1px solid rgba(25, 24, 23, 0.16);
   border-radius: 8px;
   padding: 4px 8px;
   font-size: 0.74rem;
   font-weight: 600;
   background: rgba(255, 255, 255, 0.92);
+}
+
+.group-run-baseline {
+  margin-left: 6px;
 }
 
 .status-badge {

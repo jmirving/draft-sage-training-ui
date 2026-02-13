@@ -182,6 +182,7 @@ const VARIANT_TOKEN_LABELS = {
   inspection_keep: "Inspection keep"
 };
 const MAX_COMPARE_RUNS = 6;
+const GROUP_BASELINE_STORAGE_KEY = "draftsage.groupBaselines.v1";
 
 const state = {
   indexData: null,
@@ -217,6 +218,7 @@ const state = {
   indexSources: [],
   compareRunIds: [],
   compareWorkspaceVisible: false,
+  groupBaselineRunIds: new Map(),
   expandedGroupKeys: new Set(),
   perSlotExpandedRunIds: new Set(),
   tableSort: {
@@ -491,6 +493,35 @@ function serializeConfigValue(value) {
 
 function configValuesEqual(left, right) {
   return serializeConfigValue(left) === serializeConfigValue(right);
+}
+
+function loadGroupBaselineOverrides() {
+  try {
+    const raw = window.localStorage.getItem(GROUP_BASELINE_STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return;
+    }
+    Object.entries(parsed).forEach(([groupKey, runId]) => {
+      if (groupKey && typeof runId === "string" && runId.length > 0) {
+        state.groupBaselineRunIds.set(groupKey, runId);
+      }
+    });
+  } catch (_error) {
+    // Ignore malformed local storage and continue with default behavior.
+  }
+}
+
+function persistGroupBaselineOverrides() {
+  try {
+    const payload = Object.fromEntries(state.groupBaselineRunIds.entries());
+    window.localStorage.setItem(GROUP_BASELINE_STORAGE_KEY, JSON.stringify(payload));
+  } catch (_error) {
+    // Ignore local storage write failures.
+  }
 }
 
 function sortConfigRows(rows) {
@@ -778,9 +809,18 @@ function getVariantLabel(run) {
   return cleaned || humanized;
 }
 
-function getGroupReferenceRun(runs) {
+function getGroupReferenceRun(groupKey, runs) {
   if (!Array.isArray(runs) || runs.length === 0) {
     return null;
+  }
+  const selectedBaselineRunId = groupKey ? state.groupBaselineRunIds.get(groupKey) : null;
+  if (selectedBaselineRunId) {
+    const selectedRun = runs.find((run) => run?.run_id === selectedBaselineRunId);
+    if (selectedRun) {
+      return selectedRun;
+    }
+    state.groupBaselineRunIds.delete(groupKey);
+    persistGroupBaselineOverrides();
   }
   return runs
     .map((run, index) => ({
@@ -826,6 +866,35 @@ function getRunConfig(run, loadIfMissing = false) {
   return null;
 }
 
+function getRunVariantDeltaLabel(run, options = {}) {
+  if (!run) {
+    return "—";
+  }
+  const {
+    groupRuns = null,
+    referenceRun: explicitReferenceRun = null,
+    runConfig = null,
+    referenceConfig = null,
+    loadIfMissing = false
+  } = options;
+  const resolvedGroupRuns =
+    Array.isArray(groupRuns) && groupRuns.length > 0
+      ? groupRuns
+      : getRuns().filter((candidate) => getGroupKey(candidate) === getGroupKey(run));
+  const resolvedReferenceRun =
+    explicitReferenceRun || getGroupReferenceRun(getGroupKey(run), resolvedGroupRuns);
+  const resolvedRunConfig = runConfig || getRunConfig(run, loadIfMissing);
+  const resolvedReferenceConfig =
+    referenceConfig || getRunConfig(resolvedReferenceRun, loadIfMissing);
+  return getConfigDerivedVariantLabel(
+    resolvedGroupRuns,
+    run,
+    resolvedReferenceRun,
+    resolvedRunConfig,
+    resolvedReferenceConfig
+  );
+}
+
 function getConfigDerivedVariantLabel(groupRuns, run, referenceRun, runConfig, referenceConfig) {
   if (!run) {
     return "—";
@@ -852,9 +921,9 @@ function getConfigDerivedVariantLabel(groupRuns, run, referenceRun, runConfig, r
 
   if (tokens.length === 0) {
     if (run.run_id === referenceRun.run_id) {
-      return "Reference";
+      return "Group baseline";
     }
-    return getVariantLabel(run);
+    return "Matches group baseline";
   }
 
   const visibleTokenCount = 3;
@@ -894,7 +963,7 @@ function getRunKnobSignature(run, baselineRun, baselineConfig, options = {}) {
     return {
       status: "no-baseline",
       changedCount: 0,
-      text: "No baseline configured"
+      text: "Baseline not set"
     };
   }
   if (!baselineConfig) {
@@ -1070,17 +1139,10 @@ function buildGroupStats(runs) {
 function buildComparisonRows(runs) {
   const baselineToBeat = getBaselineToBeatRun();
   const baselineMetric = baselineToBeat ? getMetricValue(baselineToBeat) : null;
-  const trueBaselineRun = getTrueBaselineRun();
-  const trueBaselineConfig = trueBaselineRun ? getRunConfig(trueBaselineRun, true) : null;
   return Array.from(buildGroupStats(runs).values()).map((group, index) => {
-    const referenceRun = getGroupReferenceRun(group.runs);
+    const referenceRun = getGroupReferenceRun(group.key, group.runs);
     const referenceConfig = getRunConfig(referenceRun, true);
     const bestConfig = getRunConfig(group.best, true);
-    const bestKnobSignature = getRunKnobSignature(group.best, trueBaselineRun, trueBaselineConfig, {
-      runConfig: bestConfig,
-      loadIfMissing: true,
-      visibleTokenCount: 3
-    });
     const metricSamples = group.runs
       .map((run) => getMetricValue(run))
       .filter((value) => typeof value === "number" && !Number.isNaN(value));
@@ -1102,7 +1164,6 @@ function buildComparisonRows(runs) {
       updatedTs: Number.isNaN(updatedTs) ? Number.NEGATIVE_INFINITY : updatedTs,
       statusLabel: STATUS_LABELS[group.best?.status] || group.best?.status || "—",
       referenceRun,
-      bestKnobSignature,
       bestVariantLabel: getConfigDerivedVariantLabel(
         group.runs,
         group.best,
@@ -1340,13 +1401,17 @@ function renderComparisonTable() {
     row.appendChild(groupCell);
 
     row.appendChild(createCell(String(group.runCount)));
-    const bestVariantSubtitle = group.best
-      ? [getVariantLabel(group.best), group.best?.run_id || ""].filter(Boolean).join(" · ")
-      : "";
+    const bestVariantPrimary = group.best
+      ? group.bestVariantLabel || getVariantLabel(group.best)
+      : "—";
+    const bestVariantSecondary =
+      group.best && bestVariantPrimary !== getVariantLabel(group.best)
+        ? getVariantLabel(group.best)
+        : "";
     row.appendChild(
       createPrimarySecondaryCell(
-        group.best ? group.bestKnobSignature?.text || group.bestVariantLabel : "—",
-        bestVariantSubtitle
+        bestVariantPrimary,
+        bestVariantSecondary
       )
     );
     row.appendChild(
@@ -1518,8 +1583,8 @@ function compareComparisonRows(a, b) {
       break;
     case "variant":
       base = compareNullableStrings(
-        a.bestKnobSignature?.text || a.bestVariantLabel || "",
-        b.bestKnobSignature?.text || b.bestVariantLabel || ""
+        a.bestVariantLabel || "",
+        b.bestVariantLabel || ""
       );
       break;
     case "runs":
@@ -1622,10 +1687,8 @@ function renderGroupDetailsRow(group, columnCount) {
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  const referenceRun = getGroupReferenceRun(group.runs);
+  const referenceRun = getGroupReferenceRun(group.key, group.runs);
   const referenceConfig = getRunConfig(referenceRun, true);
-  const trueBaselineRun = getTrueBaselineRun();
-  const trueBaselineConfig = trueBaselineRun ? getRunConfig(trueBaselineRun, true) : null;
   const sortedRuns = group.runs
     .slice()
     .map((run, index) => {
@@ -1659,11 +1722,7 @@ function renderGroupDetailsRow(group, columnCount) {
   sortedRuns.forEach((entry) => {
     const run = entry.run;
     const runConfig = getRunConfig(run, true);
-    const runKnobSignature = getRunKnobSignature(run, trueBaselineRun, trueBaselineConfig, {
-      runConfig,
-      loadIfMissing: true,
-      visibleTokenCount: 3
-    });
+    const isGroupBaseline = referenceRun?.run_id === run.run_id;
     const variantLabel = getConfigDerivedVariantLabel(
       group.runs,
       run,
@@ -1701,11 +1760,12 @@ function renderGroupDetailsRow(group, columnCount) {
     variantCell.className = "group-run-variant";
     const variantPrimary = document.createElement("span");
     variantPrimary.className = "table-primary";
-    variantPrimary.textContent = runKnobSignature.text;
-    variantPrimary.title = `${getVariantRawLabel(run)} | ${runKnobSignature.text}`;
+    variantPrimary.textContent = variantLabel;
+    variantPrimary.title = getVariantRawLabel(run);
     const variantSecondary = document.createElement("span");
     variantSecondary.className = "table-secondary";
-    variantSecondary.textContent = [variantLabel, run.run_id || ""].filter(Boolean).join(" · ");
+    variantSecondary.textContent =
+      variantLabel !== getVariantLabel(run) ? getVariantLabel(run) : "";
     variantCell.appendChild(variantPrimary);
     if (variantSecondary.textContent) {
       variantCell.appendChild(variantSecondary);
@@ -1728,7 +1788,20 @@ function renderGroupDetailsRow(group, columnCount) {
       selectRun(run.run_id);
     });
 
+    const baselineButton = document.createElement("button");
+    baselineButton.type = "button";
+    baselineButton.className = "group-run-baseline";
+    baselineButton.textContent = isGroupBaseline ? "Baseline" : "Set baseline";
+    baselineButton.disabled = isGroupBaseline;
+    baselineButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.groupBaselineRunIds.set(group.key, run.run_id);
+      persistGroupBaselineOverrides();
+      renderAll();
+    });
+
     actionsCell.appendChild(openButton);
+    actionsCell.appendChild(baselineButton);
     tr.appendChild(actionsCell);
 
     tbody.appendChild(tr);
@@ -1820,7 +1893,12 @@ function renderWorkspaceKnobTable(compareRuns, configByRunId) {
   headRow.appendChild(knobHeader);
   compareRuns.forEach((run) => {
     const th = document.createElement("th");
-    th.textContent = shortenLabel(getVariantLabel(run), 26);
+    th.textContent = shortenLabel(
+      getRunVariantDeltaLabel(run, {
+        loadIfMissing: true
+      }),
+      26
+    );
     headRow.appendChild(th);
   });
   elements.compareKnobHead.appendChild(headRow);
@@ -1900,9 +1978,8 @@ function renderComparisonWorkspace() {
   }
 
   compareRuns.forEach((run) => {
-    const chipKnobSignature = getRunKnobSignature(run, trueBaselineRun, trueBaselineConfig, {
-      loadIfMissing: true,
-      visibleTokenCount: 2
+    const variantDeltaLabel = getRunVariantDeltaLabel(run, {
+      loadIfMissing: true
     });
     const chip = document.createElement("div");
     chip.className = "compare-chip";
@@ -1913,8 +1990,8 @@ function renderComparisonWorkspace() {
 
     const label = document.createElement("span");
     label.className = "compare-chip-label";
-    label.textContent = shortenLabel(chipKnobSignature.text, 34);
-    label.title = `${getVariantLabel(run)} | ${chipKnobSignature.text}`;
+    label.textContent = shortenLabel(variantDeltaLabel, 34);
+    label.title = `${getVariantLabel(run)} | ${variantDeltaLabel}`;
 
     const remove = document.createElement("button");
     remove.type = "button";
@@ -1946,7 +2023,7 @@ function renderComparisonWorkspace() {
   }
   if (compareRuns.length < 2) {
     setCompareState(
-      "Select at least two runs to compare side-by-side. Tip: Shift-click a row to add it.",
+      "Select at least two runs to compare side-by-side using run checkboxes.",
       "empty"
     );
     return;
@@ -2002,6 +2079,10 @@ function renderComparisonWorkspace() {
       loadIfMissing: true,
       visibleTokenCount: 4
     });
+    const variantDeltaLabel = getRunVariantDeltaLabel(run, {
+      runConfig,
+      loadIfMissing: true
+    });
     let knobSummary = runKnobSignature.text;
     if (runKnobSignature.status === "changed") {
       knobSummary = `${runKnobSignature.changedCount} knob changes vs baseline: ${runKnobSignature.text}`;
@@ -2026,8 +2107,8 @@ function renderComparisonWorkspace() {
     const cardHeader = document.createElement("div");
     cardHeader.className = "compare-matrix-header";
     const title = document.createElement("h4");
-    title.textContent = shortenLabel(runKnobSignature.text, 42);
-    title.title = `${getVariantLabel(run)} | ${runKnobSignature.text}`;
+    title.textContent = shortenLabel(variantDeltaLabel, 42);
+    title.title = `${getVariantLabel(run)} | ${variantDeltaLabel}`;
     const status = document.createElement("span");
     status.className = `status-badge status-${run.status || "planned"}`;
     status.textContent = STATUS_LABELS[run.status] || run.status || "—";
@@ -2036,7 +2117,7 @@ function renderComparisonWorkspace() {
 
     const subtitle = document.createElement("p");
     subtitle.className = "muted";
-    subtitle.textContent = `${getGroupLabel(run)} · ${getVariantLabel(run)} · ${run.run_id}`;
+    subtitle.textContent = `${getGroupLabel(run)} · ${getVariantLabel(run)}`;
 
     const metrics = document.createElement("div");
     metrics.className = "compare-matrix-metrics";
@@ -2088,7 +2169,12 @@ function renderComparisonWorkspace() {
     headRow.appendChild(knobHeader);
     compareRuns.forEach((run) => {
       const th = document.createElement("th");
-      th.textContent = shortenLabel(getVariantLabel(run), 26);
+      th.textContent = shortenLabel(
+        getRunVariantDeltaLabel(run, {
+          loadIfMissing: true
+        }),
+        26
+      );
       headRow.appendChild(th);
     });
     elements.compareKnobHead.appendChild(headRow);
@@ -3305,6 +3391,31 @@ function sanitizeCompareSelection() {
   state.compareRunIds = state.compareRunIds.filter((runId) => runIds.has(runId));
 }
 
+function sanitizeGroupBaselineOverrides() {
+  const validByGroup = new Map();
+  getRuns().forEach((run) => {
+    const groupKey = getGroupKey(run);
+    const entries = validByGroup.get(groupKey) || new Set();
+    if (run?.run_id) {
+      entries.add(run.run_id);
+    }
+    validByGroup.set(groupKey, entries);
+  });
+
+  let changed = false;
+  Array.from(state.groupBaselineRunIds.entries()).forEach(([groupKey, runId]) => {
+    const allowed = validByGroup.get(groupKey);
+    if (!allowed || !allowed.has(runId)) {
+      state.groupBaselineRunIds.delete(groupKey);
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    persistGroupBaselineOverrides();
+  }
+}
+
 function getCompareRuns() {
   sanitizeCompareSelection();
   return state.compareRunIds.map((runId) => findRunById(runId)).filter(Boolean);
@@ -3720,6 +3831,7 @@ function applyIndexResult(result, options = {}) {
   state.groupFilter = preserveFilters ? priorGroup : "all";
 
   rebuildGroupLabels();
+  sanitizeGroupBaselineOverrides();
 
   if (updateUrl) {
     updateQueryParam(state.indexPath);
@@ -4011,6 +4123,7 @@ function attachEventHandlers() {
 }
 
 function init() {
+  loadGroupBaselineOverrides();
   attachEventHandlers();
   state.refreshIntervalMs = 30000;
   state.metricKey = elements.metricFilter.value || "accuracy";
