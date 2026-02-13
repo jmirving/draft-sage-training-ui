@@ -80,6 +80,24 @@ const CONFIG_DIFF_REGISTRY = [
     group: "Optimization"
   },
   {
+    key: "champion_eligibility_path",
+    label: "Champion eligibility mask",
+    group: "Priors",
+    format: "presence_bool"
+  },
+  {
+    key: "champion_priors_dir",
+    label: "Champion PB priors artifact",
+    group: "Priors",
+    format: "presence_bool"
+  },
+  {
+    key: "role_priors_dir",
+    label: "Role priors artifact",
+    group: "Priors",
+    format: "presence_bool"
+  },
+  {
     key: "champion_priors_strength",
     label: "Champion PB priors strength",
     group: "Priors"
@@ -350,6 +368,9 @@ function compactPath(value, maxLength = 62) {
 }
 
 function formatConfigValue(value, format) {
+  if (format === "presence_bool") {
+    return value ? "On" : "Off";
+  }
   if (value === undefined || value === null || value === "") {
     return "—";
   }
@@ -437,6 +458,16 @@ function configValuesEqual(left, right) {
   return serializeConfigValue(left) === serializeConfigValue(right);
 }
 
+function sortConfigRows(rows) {
+  return [...rows].sort((a, b) => {
+    const groupCompare = (a.group || "").localeCompare(b.group || "");
+    if (groupCompare !== 0) {
+      return groupCompare;
+    }
+    return (a.label || "").localeCompare(b.label || "");
+  });
+}
+
 function ensureSummaryEntry(run) {
   if (!run?.run_id) {
     return null;
@@ -483,27 +514,26 @@ function buildConfigDiffRows(selectedConfig, baselineConfig) {
     });
   });
 
-  const changedRows = rows
-    .filter((row) => row.changed)
-    .sort((a, b) => {
-      const groupCompare = (a.group || "").localeCompare(b.group || "");
-      if (groupCompare !== 0) {
-        return groupCompare;
-      }
-      return (a.label || "").localeCompare(b.label || "");
-    });
+  const allRows = sortConfigRows(rows);
+  const changedRows = allRows.filter((row) => row.changed);
 
   return {
+    allRows,
     changedRows,
-    unchangedCount: rows.filter((row) => !row.changed).length
+    unchangedCount: allRows.length - changedRows.length
   };
 }
 
-function createConfigDiffRow(row) {
+function createConfigDiffRow(row, options = {}) {
+  const { selectedLabel = "Selected", baselineLabel = "Baseline", includeBaseline = true } =
+    options;
   const item = document.createElement("div");
   item.className = "config-diff-row";
   if (row.isUnknown) {
     item.classList.add("unknown");
+  }
+  if (!includeBaseline) {
+    item.classList.add("single-value");
   }
 
   const label = document.createElement("span");
@@ -512,16 +542,46 @@ function createConfigDiffRow(row) {
 
   const selected = document.createElement("span");
   selected.className = "config-diff-value selected";
-  selected.textContent = `Selected: ${formatConfigValue(row.selectedValue, row.format)}`;
-
-  const baseline = document.createElement("span");
-  baseline.className = "config-diff-value baseline";
-  baseline.textContent = `Baseline: ${formatConfigValue(row.baselineValue, row.format)}`;
+  selected.textContent = `${selectedLabel}: ${formatConfigValue(row.selectedValue, row.format)}`;
 
   item.appendChild(label);
   item.appendChild(selected);
-  item.appendChild(baseline);
+  if (includeBaseline) {
+    const baseline = document.createElement("span");
+    baseline.className = "config-diff-value baseline";
+    baseline.textContent = `${baselineLabel}: ${formatConfigValue(row.baselineValue, row.format)}`;
+    item.appendChild(baseline);
+  }
   return item;
+}
+
+function appendGroupedConfigRows(body, rows, renderRow) {
+  const groupedRows = new Map();
+  rows.forEach((row) => {
+    const group = row.group || "Other";
+    if (!groupedRows.has(group)) {
+      groupedRows.set(group, []);
+    }
+    groupedRows.get(group).push(row);
+  });
+
+  Array.from(groupedRows.keys())
+    .sort((left, right) => left.localeCompare(right))
+    .forEach((group) => {
+      const groupBlock = document.createElement("div");
+      groupBlock.className = "config-diff-group";
+      const groupTitle = document.createElement("h5");
+      groupTitle.textContent = group;
+      groupBlock.appendChild(groupTitle);
+
+      const list = document.createElement("div");
+      list.className = "config-diff-list";
+      groupedRows.get(group).forEach((row) => {
+        list.appendChild(renderRow(row));
+      });
+      groupBlock.appendChild(list);
+      body.appendChild(groupBlock);
+    });
 }
 
 function updateQueryParam(path) {
@@ -2133,14 +2193,33 @@ function renderConfigDiffSection(selectedRun, selectedSummaryEntry) {
   }
 
   const diff = buildConfigDiffRows(selectedConfigState.data, baselineConfigState.data);
-  count.textContent = `${diff.changedRows.length} changed`;
+  const isBaselineSnapshot = baselineRun.run_id === selectedRun.run_id;
 
-  if (baselineRun.run_id === selectedRun.run_id) {
+  if (isBaselineSnapshot) {
+    title.textContent = "True Baseline Config Snapshot";
+    count.textContent = `${diff.allRows.length} tracked`;
     const note = document.createElement("p");
     note.className = "muted";
-    note.textContent = "Selected run is the true baseline.";
+    note.textContent = "Selected run is the true baseline. Showing tracked knob values.";
     body.appendChild(note);
+    if (diff.allRows.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "No tracked config knobs were found in this run config.";
+      body.appendChild(empty);
+      section.appendChild(body);
+      return section;
+    }
+
+    appendGroupedConfigRows(body, diff.allRows, (row) =>
+      createConfigDiffRow(row, { selectedLabel: "Value", includeBaseline: false })
+    );
+
+    section.appendChild(body);
+    return section;
   }
+
+  count.textContent = `${diff.changedRows.length} changed`;
 
   if (diff.changedRows.length === 0) {
     const empty = document.createElement("p");
@@ -2151,32 +2230,7 @@ function renderConfigDiffSection(selectedRun, selectedSummaryEntry) {
     return section;
   }
 
-  const groupedRows = new Map();
-  diff.changedRows.forEach((row) => {
-    const group = row.group || "Other";
-    if (!groupedRows.has(group)) {
-      groupedRows.set(group, []);
-    }
-    groupedRows.get(group).push(row);
-  });
-
-  Array.from(groupedRows.keys())
-    .sort((left, right) => left.localeCompare(right))
-    .forEach((group) => {
-      const groupBlock = document.createElement("div");
-      groupBlock.className = "config-diff-group";
-      const groupTitle = document.createElement("h5");
-      groupTitle.textContent = group;
-      groupBlock.appendChild(groupTitle);
-
-      const list = document.createElement("div");
-      list.className = "config-diff-list";
-      groupedRows.get(group).forEach((row) => {
-        list.appendChild(createConfigDiffRow(row));
-      });
-      groupBlock.appendChild(list);
-      body.appendChild(groupBlock);
-    });
+  appendGroupedConfigRows(body, diff.changedRows, (row) => createConfigDiffRow(row));
 
   const stableCount = document.createElement("p");
   stableCount.className = "muted";

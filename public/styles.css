@@ -857,6 +857,10 @@ button {
   border: 1px solid rgba(25, 24, 23, 0.1);
 }
 
+.config-diff-row.single-value {
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+}
+
 .config-diff-row > * {
   min-width: 0;
 }
