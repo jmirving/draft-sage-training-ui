@@ -639,13 +639,23 @@ button {
 }
 
 .comparison td.group-cell {
-  display: grid;
-  gap: 2px;
+  vertical-align: top;
 }
 
 .comparison td.primary-secondary-cell {
-  display: grid;
-  gap: 2px;
+  vertical-align: top;
+}
+
+.comparison td.group-cell .group-cell-name,
+.comparison td.group-cell .group-cell-meta,
+.comparison td.primary-secondary-cell .table-primary,
+.comparison td.primary-secondary-cell .table-secondary {
+  display: block;
+}
+
+.comparison td.group-cell .group-cell-meta,
+.comparison td.primary-secondary-cell .table-secondary {
+  margin-top: 2px;
 }
 
 .table-primary {
