@@ -428,6 +428,7 @@ button {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.84rem;
+  table-layout: fixed;
 }
 
 .compare-knob-table th,
@@ -445,8 +446,20 @@ button {
   font-size: 0.72rem;
 }
 
+.compare-knob-table th:first-child,
 .compare-knob-table td.knob-label {
+  width: 34%;
+  min-width: 220px;
   font-weight: 600;
+  text-align: left;
+}
+
+.compare-knob-table th:not(:first-child),
+.compare-knob-table td:not(.knob-label) {
+  text-align: center;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .compare-knob-table tr.group-start td,
@@ -780,21 +793,21 @@ button {
 }
 
 .group-run-actions {
-  white-space: nowrap;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
 .group-run-open,
-.group-run-baseline {
+.group-run-baseline,
+.group-run-true-baseline {
   border: 1px solid rgba(25, 24, 23, 0.16);
   border-radius: 8px;
   padding: 4px 8px;
   font-size: 0.74rem;
   font-weight: 600;
   background: rgba(255, 255, 255, 0.92);
-}
-
-.group-run-baseline {
-  margin-left: 6px;
 }
 
 .status-badge {

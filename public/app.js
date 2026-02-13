@@ -183,6 +183,7 @@ const VARIANT_TOKEN_LABELS = {
 };
 const MAX_COMPARE_RUNS = 6;
 const GROUP_BASELINE_STORAGE_KEY = "draftsage.groupBaselines.v1";
+const TRUE_BASELINE_STORAGE_KEY = "draftsage.trueBaselineRunId.v1";
 
 const state = {
   indexData: null,
@@ -219,6 +220,7 @@ const state = {
   compareRunIds: [],
   compareWorkspaceVisible: false,
   groupBaselineRunIds: new Map(),
+  trueBaselineOverrideRunId: null,
   expandedGroupKeys: new Set(),
   perSlotExpandedRunIds: new Set(),
   tableSort: {
@@ -519,6 +521,33 @@ function persistGroupBaselineOverrides() {
   try {
     const payload = Object.fromEntries(state.groupBaselineRunIds.entries());
     window.localStorage.setItem(GROUP_BASELINE_STORAGE_KEY, JSON.stringify(payload));
+  } catch (_error) {
+    // Ignore local storage write failures.
+  }
+}
+
+function loadTrueBaselineOverride() {
+  try {
+    const runId = window.localStorage.getItem(TRUE_BASELINE_STORAGE_KEY);
+    if (!runId || typeof runId !== "string" || runId.length === 0) {
+      return;
+    }
+    state.trueBaselineOverrideRunId = runId;
+  } catch (_error) {
+    // Ignore malformed local storage and continue with default behavior.
+  }
+}
+
+function persistTrueBaselineOverride() {
+  try {
+    if (state.trueBaselineOverrideRunId) {
+      window.localStorage.setItem(
+        TRUE_BASELINE_STORAGE_KEY,
+        state.trueBaselineOverrideRunId
+      );
+    } else {
+      window.localStorage.removeItem(TRUE_BASELINE_STORAGE_KEY);
+    }
   } catch (_error) {
     // Ignore local storage write failures.
   }
@@ -1184,6 +1213,15 @@ function findRunById(runId) {
 }
 
 function getTrueBaselineRun() {
+  if (state.trueBaselineOverrideRunId) {
+    const overrideRun = findRunById(state.trueBaselineOverrideRunId);
+    if (overrideRun) {
+      return overrideRun;
+    }
+    state.trueBaselineOverrideRunId = null;
+    persistTrueBaselineOverride();
+  }
+
   const runId = state.indexData?.true_baseline_run_id;
   if (runId) {
     const run = findRunById(runId);
@@ -1721,6 +1759,8 @@ function renderGroupDetailsRow(group, columnCount) {
 
   sortedRuns.forEach((entry) => {
     const run = entry.run;
+    const trueBaselineRun = getTrueBaselineRun();
+    const isTrueBaseline = trueBaselineRun?.run_id === run.run_id;
     const runConfig = getRunConfig(run, true);
     const isGroupBaseline = referenceRun?.run_id === run.run_id;
     const variantLabel = getConfigDerivedVariantLabel(
@@ -1800,8 +1840,23 @@ function renderGroupDetailsRow(group, columnCount) {
       renderAll();
     });
 
+    const trueBaselineButton = document.createElement("button");
+    trueBaselineButton.type = "button";
+    trueBaselineButton.className = "group-run-true-baseline";
+    trueBaselineButton.textContent = isTrueBaseline
+      ? "True baseline"
+      : "Set true baseline";
+    trueBaselineButton.disabled = isTrueBaseline;
+    trueBaselineButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.trueBaselineOverrideRunId = run.run_id;
+      persistTrueBaselineOverride();
+      renderAll();
+    });
+
     actionsCell.appendChild(openButton);
     actionsCell.appendChild(baselineButton);
+    actionsCell.appendChild(trueBaselineButton);
     tr.appendChild(actionsCell);
 
     tbody.appendChild(tr);
@@ -3416,6 +3471,17 @@ function sanitizeGroupBaselineOverrides() {
   }
 }
 
+function sanitizeTrueBaselineOverride() {
+  if (!state.trueBaselineOverrideRunId) {
+    return;
+  }
+  const exists = getRuns().some((run) => run?.run_id === state.trueBaselineOverrideRunId);
+  if (!exists) {
+    state.trueBaselineOverrideRunId = null;
+    persistTrueBaselineOverride();
+  }
+}
+
 function getCompareRuns() {
   sanitizeCompareSelection();
   return state.compareRunIds.map((runId) => findRunById(runId)).filter(Boolean);
@@ -3832,6 +3898,7 @@ function applyIndexResult(result, options = {}) {
 
   rebuildGroupLabels();
   sanitizeGroupBaselineOverrides();
+  sanitizeTrueBaselineOverride();
 
   if (updateUrl) {
     updateQueryParam(state.indexPath);
@@ -4124,6 +4191,7 @@ function attachEventHandlers() {
 
 function init() {
   loadGroupBaselineOverrides();
+  loadTrueBaselineOverride();
   attachEventHandlers();
   state.refreshIntervalMs = 30000;
   state.metricKey = elements.metricFilter.value || "accuracy";
