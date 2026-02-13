@@ -262,6 +262,8 @@ const elements = {
   compareMatrix: document.getElementById("compare-matrix"),
   compareKnobHead: document.getElementById("compare-knob-head"),
   compareKnobBody: document.getElementById("compare-knob-body"),
+  compareSlotHead: document.getElementById("compare-slot-head"),
+  compareSlotBody: document.getElementById("compare-slot-body"),
   detailState: document.getElementById("detail-state"),
   detailBody: document.getElementById("detail-body"),
   detailStatus: document.getElementById("detail-status")
@@ -1986,11 +1988,147 @@ function renderWorkspaceKnobTable(compareRuns, configByRunId) {
   });
 }
 
+function buildWorkspaceSlotRows(compareRuns, summaryByRunId) {
+  const bySlotId = new Map();
+
+  compareRuns.forEach((run) => {
+    const summary = summaryByRunId.get(run.run_id) || null;
+    const rows = normalizePerSlotMetrics(summary);
+    rows.forEach((row) => {
+      const slotId = row.slotId || `slot_${String(row.slot || 0).padStart(2, "0")}`;
+      if (!bySlotId.has(slotId)) {
+        bySlotId.set(slotId, {
+          slotId,
+          slot: row.slot || Number.POSITIVE_INFINITY,
+          label: formatTeamSlotLabel(row),
+          values: new Map()
+        });
+      }
+      const entry = bySlotId.get(slotId);
+      if (entry) {
+        entry.slot = Math.min(entry.slot, row.slot || Number.POSITIVE_INFINITY);
+        entry.label = entry.label || formatTeamSlotLabel(row);
+        entry.values.set(run.run_id, row);
+      }
+    });
+  });
+
+  return Array.from(bySlotId.values()).sort((left, right) => {
+    if (left.slot === right.slot) {
+      return left.label.localeCompare(right.label);
+    }
+    return left.slot - right.slot;
+  });
+}
+
+function renderWorkspaceSlotTable(compareRuns, summaryByRunId, options = {}) {
+  const { loading = false } = options;
+  elements.compareSlotHead.innerHTML = "";
+  elements.compareSlotBody.innerHTML = "";
+
+  const headRow = document.createElement("tr");
+  const slotHeader = document.createElement("th");
+  slotHeader.textContent = "Slot";
+  headRow.appendChild(slotHeader);
+  compareRuns.forEach((run) => {
+    const th = document.createElement("th");
+    th.textContent = shortenLabel(
+      getRunVariantDeltaLabel(run, {
+        loadIfMissing: true
+      }),
+      26
+    );
+    headRow.appendChild(th);
+  });
+  elements.compareSlotHead.appendChild(headRow);
+
+  const slotRows = buildWorkspaceSlotRows(compareRuns, summaryByRunId);
+  if (slotRows.length === 0) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.className = "muted";
+    td.colSpan = compareRuns.length + 1;
+    td.textContent = loading
+      ? "Loading per-slot metrics…"
+      : "No per-slot metrics published for selected runs.";
+    tr.appendChild(td);
+    elements.compareSlotBody.appendChild(tr);
+    return;
+  }
+
+  const trueBaseline = getTrueBaselineRun();
+  const baselineRunId =
+    trueBaseline && compareRuns.some((run) => run.run_id === trueBaseline.run_id)
+      ? trueBaseline.run_id
+      : compareRuns[0]?.run_id || null;
+
+  slotRows.forEach((slotEntry, slotIndex) => {
+    const tr = document.createElement("tr");
+    if (slotIndex === 0) {
+      tr.classList.add("group-start");
+    }
+
+    const slotCell = document.createElement("td");
+    slotCell.className = "slot-label";
+    const slotName = document.createElement("span");
+    slotName.className = "compare-slot-label-main";
+    slotName.textContent = slotEntry.label || `Slot ${slotEntry.slot || "?"}`;
+    const slotCode = document.createElement("span");
+    slotCode.className = "compare-slot-label-meta";
+    slotCode.textContent = `Slot ${slotEntry.slot || "?"}`;
+    slotCell.appendChild(slotName);
+    slotCell.appendChild(slotCode);
+    tr.appendChild(slotCell);
+
+    const baselineRow = baselineRunId ? slotEntry.values.get(baselineRunId) : null;
+    const baselineAccuracy =
+      typeof baselineRow?.accuracy === "number" ? baselineRow.accuracy : null;
+
+    compareRuns.forEach((run) => {
+      const valueCell = document.createElement("td");
+      const row = slotEntry.values.get(run.run_id);
+      if (!row) {
+        valueCell.textContent = "—";
+        tr.appendChild(valueCell);
+        return;
+      }
+
+      const accuracyText = formatPercent(row.accuracy, 1);
+      const countsText = `${formatInteger(row.correct)}/${formatInteger(row.total)}`;
+      const delta =
+        baselineAccuracy !== null && typeof row.accuracy === "number"
+          ? row.accuracy - baselineAccuracy
+          : null;
+
+      const main = document.createElement("span");
+      main.className = "compare-slot-value-main";
+      main.textContent = accuracyText;
+      valueCell.appendChild(main);
+
+      const meta = document.createElement("span");
+      meta.className = "compare-slot-value-meta";
+      if (run.run_id === baselineRunId) {
+        meta.textContent = `${countsText} · baseline`;
+      } else if (delta !== null) {
+        meta.textContent = `${countsText} · Δ ${formatDelta(delta, 3)}`;
+      } else {
+        meta.textContent = countsText;
+      }
+      valueCell.appendChild(meta);
+      tr.appendChild(valueCell);
+    });
+
+    elements.compareSlotBody.appendChild(tr);
+  });
+}
+
 function renderComparisonWorkspace() {
   elements.compareSelected.innerHTML = "";
   elements.compareMatrix.innerHTML = "";
   elements.compareKnobHead.innerHTML = "";
   elements.compareKnobBody.innerHTML = "";
+  elements.compareSlotHead.innerHTML = "";
+  elements.compareSlotBody.innerHTML = "";
 
   const filteredRuns = getFilteredRuns();
   const compareRuns = getCompareRuns();
@@ -2080,12 +2218,18 @@ function renderComparisonWorkspace() {
   const targetMetric = targetRun ? getMetricValue(targetRun) : null;
 
   const configByRunId = new Map();
+  const summaryByRunId = new Map();
   let configReady = true;
   let configError = null;
+  let summaryReady = true;
 
   compareRuns.forEach((run) => {
     const summaryEntry = ensureSummaryEntry(run);
     const summary = summaryEntry?.data;
+    summaryByRunId.set(run.run_id, summary || null);
+    if (!summary) {
+      summaryReady = false;
+    }
     const accuracy =
       typeof run?.metrics?.accuracy === "number"
         ? run.metrics.accuracy
@@ -2203,6 +2347,10 @@ function renderComparisonWorkspace() {
       setCompareState("Loading config artifacts for variable comparison…");
     }
   }
+
+  renderWorkspaceSlotTable(compareRuns, summaryByRunId, {
+    loading: !summaryReady
+  });
 
   if (configByRunId.size === compareRuns.length) {
     renderWorkspaceKnobTable(compareRuns, configByRunId);

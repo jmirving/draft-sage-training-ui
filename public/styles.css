@@ -430,6 +430,13 @@ button {
   gap: 12px;
 }
 
+.compare-matrix-wrap h3,
+.compare-knob-wrap h3,
+.compare-slot-wrap h3 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+
 .compare-matrix-card {
   border: 1px solid rgba(25, 24, 23, 0.1);
   border-radius: 14px;
@@ -495,16 +502,11 @@ button {
   font-size: 0.82rem;
 }
 
-.compare-knob-wrap h3 {
-  margin: 0 0 8px;
-  font-size: 0.95rem;
-}
-
 .compare-knob-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.84rem;
-  table-layout: fixed;
+  table-layout: auto;
 }
 
 .compare-knob-table th,
@@ -512,7 +514,7 @@ button {
   padding: 9px 10px;
   border-bottom: 1px solid rgba(25, 24, 23, 0.08);
   text-align: left;
-  vertical-align: top;
+  vertical-align: middle;
 }
 
 .compare-knob-table thead th {
@@ -524,14 +526,15 @@ button {
 
 .compare-knob-table th:first-child,
 .compare-knob-table td.knob-label {
-  width: 34%;
-  min-width: 220px;
+  width: 42%;
+  min-width: 280px;
   font-weight: 600;
   text-align: left;
 }
 
 .compare-knob-table th:not(:first-child),
 .compare-knob-table td:not(.knob-label) {
+  min-width: 140px;
   text-align: center;
   vertical-align: middle;
   overflow-wrap: anywhere;
@@ -545,6 +548,68 @@ button {
 
 .compare-knob-table tr.unknown td.knob-label {
   color: var(--muted);
+}
+
+.compare-slot-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+  table-layout: auto;
+}
+
+.compare-slot-table th,
+.compare-slot-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid rgba(25, 24, 23, 0.08);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.compare-slot-table thead th {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.compare-slot-table th:first-child,
+.compare-slot-table td.slot-label {
+  width: 30%;
+  min-width: 220px;
+  font-weight: 600;
+}
+
+.compare-slot-table th:not(:first-child),
+.compare-slot-table td:not(.slot-label) {
+  min-width: 150px;
+  text-align: center;
+}
+
+.compare-slot-table tr.group-start td,
+.compare-slot-table tr.group-start th {
+  border-top: 1px solid rgba(25, 24, 23, 0.14);
+}
+
+.compare-slot-table td.slot-label {
+  display: grid;
+  gap: 2px;
+}
+
+.compare-slot-label-main,
+.compare-slot-value-main {
+  display: block;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.compare-slot-label-meta,
+.compare-slot-value-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+  line-height: 1.25;
 }
 
 .panel-header {
