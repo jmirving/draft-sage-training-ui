@@ -102,26 +102,26 @@ const CONFIG_DIFF_REGISTRY = [
     label: "Champion P/B priors source",
     group: "Draft Priors",
     format: "presence_bool",
-    help: "Whether champion pick/ban prior artifacts are loaded."
+    help: "Whether champion pick/ban priors are loaded. P/B priors bias predictions toward champions historically picked or banned in similar contexts."
   },
   {
     key: "role_priors_dir",
-    label: "Role priors source",
+    label: "Champion Role Distribution source",
     group: "Draft Priors",
     format: "presence_bool",
-    help: "Whether role prior artifacts are loaded."
+    help: "Whether champion role distribution priors are loaded. Role distribution priors bias picks toward champions that fit missing team roles."
   },
   {
     key: "champion_priors_strength",
     label: "Champion P/B priors weight",
     group: "Draft Priors",
-    help: "Scalar weight applied to champion pick/ban priors."
+    help: "Scalar weight applied to champion pick/ban priors. Higher values increase the influence of historical pick/ban tendencies."
   },
   {
     key: "role_priors_strength",
     label: "Role priors weight",
     group: "Draft Priors",
-    help: "Scalar weight applied to role priors."
+    help: "Scalar weight applied to role distribution priors. Higher values increase pressure toward role-balanced drafts."
   },
   {
     key: "team_league_priors_strength",
@@ -147,7 +147,7 @@ const CONFIG_DIFF_REGISTRY = [
     label: "League embeddings",
     group: "Embeddings",
     format: "bool",
-    help: "Whether learned league embeddings are enabled."
+    help: "Whether learned league embeddings are enabled. League embeddings help the model capture league-level drafting patterns and meta differences."
   },
   {
     key: "use_team_embeddings",
@@ -155,7 +155,7 @@ const CONFIG_DIFF_REGISTRY = [
     label: "Team embeddings",
     group: "Embeddings",
     format: "bool",
-    help: "Whether learned team embeddings are enabled."
+    help: "Whether learned team embeddings are enabled. Team embeddings help the model capture persistent team-specific draft preferences."
   },
   {
     key: "inspection_keep",
@@ -448,11 +448,8 @@ function buildConfigHelpText(spec) {
   if (!spec?.key) {
     return "";
   }
-  const keyInfo = spec.inverseKey
-    ? `Config keys: ${spec.key} (inverse: ${spec.inverseKey}).`
-    : `Config key: ${spec.key}.`;
   const description = spec.help || "Tracked configuration knob used in comparisons.";
-  return `${keyInfo} ${description}`;
+  return description;
 }
 
 function serializeConfigValue(value) {
