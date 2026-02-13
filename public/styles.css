@@ -517,42 +517,17 @@ button {
 
 #comparison-table th:nth-child(1),
 #comparison-table td:nth-child(1) {
-  width: 20%;
+  width: 24%;
 }
 
 #comparison-table th:nth-child(2),
 #comparison-table td:nth-child(2) {
-  width: 7%;
+  width: 52%;
 }
 
 #comparison-table th:nth-child(3),
 #comparison-table td:nth-child(3) {
-  width: 30%;
-}
-
-#comparison-table th:nth-child(4),
-#comparison-table td:nth-child(4) {
-  width: 9%;
-}
-
-#comparison-table th:nth-child(5),
-#comparison-table td:nth-child(5) {
-  width: 11%;
-}
-
-#comparison-table th:nth-child(6),
-#comparison-table td:nth-child(6) {
-  width: 9%;
-}
-
-#comparison-table th:nth-child(7),
-#comparison-table td:nth-child(7) {
-  width: 10%;
-}
-
-#comparison-table th:nth-child(8),
-#comparison-table td:nth-child(8) {
-  width: 4%;
+  width: 24%;
 }
 
 .group-spread {
@@ -699,16 +674,6 @@ button {
   text-transform: uppercase;
 }
 
-.group-detail-toggle {
-  border: 1px solid rgba(25, 24, 23, 0.16);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--ink);
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 4px 10px;
-}
-
 .group-details-row {
   cursor: default;
 }
@@ -795,10 +760,6 @@ button {
 .group-run-table td.group-run-variant {
   display: grid;
   gap: 2px;
-}
-
-#comparison-table .group-detail-toggle {
-  width: 100%;
 }
 
 .group-run-table th:nth-child(1),

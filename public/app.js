@@ -1383,7 +1383,7 @@ function renderComparisonTable() {
 
   clearTableState();
 
-  const columnCount = 8;
+  const columnCount = 3;
   const groups = buildComparisonRows(runs);
   if (state.groupFilter !== "all" && groups.length === 1) {
     state.expandedGroupKeys.add(groups[0].key);
@@ -1417,15 +1417,6 @@ function renderComparisonTable() {
       }
       selectRun(runId);
     });
-    const deltaClass =
-      group.delta === null
-        ? "neutral"
-        : group.delta > 0
-          ? "positive"
-          : group.delta < 0
-            ? "negative"
-            : "neutral";
-
     const groupCell = document.createElement("td");
     groupCell.className = "group-cell";
     const groupName = document.createElement("span");
@@ -1438,7 +1429,6 @@ function renderComparisonTable() {
     groupCell.appendChild(groupMeta);
     row.appendChild(groupCell);
 
-    row.appendChild(createCell(String(group.runCount)));
     const bestVariantPrimary = group.best
       ? group.bestVariantLabel || getVariantLabel(group.best)
       : "—";
@@ -1453,37 +1443,14 @@ function renderComparisonTable() {
       )
     );
     row.appendChild(
-      createCell(group.metricValue !== null ? formatNumber(group.metricValue) : "—")
+      createPrimarySecondaryCell(
+        group.metricValue !== null ? formatNumber(group.metricValue) : "—",
+        group.delta !== null ? `Δ ${formatDelta(group.delta)}` : ""
+      )
     );
 
-    const deltaCell = document.createElement("td");
-    const deltaSpan = document.createElement("span");
-    deltaSpan.className = `delta ${deltaClass}`;
-    deltaSpan.textContent = group.delta !== null ? formatDelta(group.delta) : "—";
-    deltaCell.appendChild(deltaSpan);
-    row.appendChild(deltaCell);
-
-    row.appendChild(createCell(group.statusLabel));
-    row.appendChild(createCell(formatDate(group.updatedRaw)));
-    const detailsCell = document.createElement("td");
-    const detailsButton = document.createElement("button");
-    detailsButton.type = "button";
-    detailsButton.className = "group-detail-toggle";
-    const expanded = state.expandedGroupKeys.has(group.key);
-    detailsButton.textContent = expanded ? "Hide runs" : "View runs";
-    detailsButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      if (state.expandedGroupKeys.has(group.key)) {
-        state.expandedGroupKeys.delete(group.key);
-      } else {
-        state.expandedGroupKeys.add(group.key);
-      }
-      renderComparisonTable();
-    });
-    detailsCell.appendChild(detailsButton);
-    row.appendChild(detailsCell);
-
     elements.comparisonBody.appendChild(row);
+    const expanded = state.expandedGroupKeys.has(group.key);
     if (expanded) {
       elements.comparisonBody.appendChild(renderGroupDetailsRow(group, columnCount));
     }
