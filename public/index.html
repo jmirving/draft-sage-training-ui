@@ -84,9 +84,13 @@
             <option value="top_k">Top-k accuracy</option>
           </select>
         </div>
+        <div class="control-block control-block-actions">
+          <label>Comparison</label>
+          <button id="compare-workspace-toggle" type="button">Show comparison (0)</button>
+        </div>
       </section>
 
-      <section class="panel compare-workspace">
+      <section id="compare-workspace" class="panel compare-workspace is-hidden">
         <div class="panel-header">
           <h2>Comparison workspace</h2>
           <span id="compare-count" class="pill">0/6 selected</span>

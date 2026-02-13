@@ -213,6 +213,17 @@ button {
   font-size: 0.9rem;
 }
 
+.control-block-actions button {
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(25, 24, 23, 0.16);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
 .analysis-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
@@ -230,6 +241,10 @@ button {
 .compare-workspace {
   display: grid;
   gap: 14px;
+}
+
+.compare-workspace.is-hidden {
+  display: none;
 }
 
 .compare-controls {
@@ -743,6 +758,15 @@ button {
   gap: 2px;
 }
 
+.group-run-select {
+  width: 56px;
+}
+
+.group-run-select input {
+  width: 16px;
+  height: 16px;
+}
+
 .group-run-row {
   cursor: pointer;
 }
@@ -759,18 +783,13 @@ button {
   white-space: nowrap;
 }
 
-.group-run-open,
-.group-run-compare {
+.group-run-open {
   border: 1px solid rgba(25, 24, 23, 0.16);
   border-radius: 8px;
   padding: 4px 8px;
   font-size: 0.74rem;
   font-weight: 600;
   background: rgba(255, 255, 255, 0.92);
-}
-
-.group-run-compare {
-  margin-left: 6px;
 }
 
 .status-badge {
