@@ -1716,7 +1716,7 @@ function renderGroupDetailsRow(group, columnCount) {
 
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
-  ["Select", "Variant", "Metric", "Status", "Updated", "Actions"].forEach((label) => {
+  ["Select", "Variant", "Metric", "Actions"].forEach((label) => {
     const th = document.createElement("th");
     th.textContent = label;
     headRow.appendChild(th);
@@ -1813,36 +1813,51 @@ function renderGroupDetailsRow(group, columnCount) {
     tr.appendChild(variantCell);
 
     tr.appendChild(createCell(entry.metricValue !== null ? formatNumber(entry.metricValue) : "—"));
-    tr.appendChild(createCell(STATUS_LABELS[run.status] || run.status || "—"));
-    tr.appendChild(createCell(formatDate(entry.updatedRaw)));
 
     const actionsCell = document.createElement("td");
     actionsCell.className = "group-run-actions";
 
+    const actionMenu = document.createElement("details");
+    actionMenu.className = "run-action-menu";
+    actionMenu.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+
+    const actionSummary = document.createElement("summary");
+    actionSummary.className = "run-action-trigger";
+    actionSummary.textContent = "⋮";
+    actionSummary.setAttribute("aria-label", "Run actions");
+    actionMenu.appendChild(actionSummary);
+
+    const actionList = document.createElement("div");
+    actionList.className = "run-action-popover";
+
     const openButton = document.createElement("button");
     openButton.type = "button";
-    openButton.className = "group-run-open";
+    openButton.className = "run-action-item";
     openButton.textContent = "Open";
     openButton.addEventListener("click", (event) => {
       event.stopPropagation();
       selectRun(run.run_id);
+      actionMenu.open = false;
     });
 
     const baselineButton = document.createElement("button");
     baselineButton.type = "button";
-    baselineButton.className = "group-run-baseline";
+    baselineButton.className = "run-action-item";
     baselineButton.textContent = isGroupBaseline ? "Baseline" : "Set baseline";
     baselineButton.disabled = isGroupBaseline;
     baselineButton.addEventListener("click", (event) => {
       event.stopPropagation();
       state.groupBaselineRunIds.set(group.key, run.run_id);
       persistGroupBaselineOverrides();
+      actionMenu.open = false;
       renderAll();
     });
 
     const trueBaselineButton = document.createElement("button");
     trueBaselineButton.type = "button";
-    trueBaselineButton.className = "group-run-true-baseline";
+    trueBaselineButton.className = "run-action-item";
     trueBaselineButton.textContent = isTrueBaseline
       ? "True baseline"
       : "Set true baseline";
@@ -1851,12 +1866,15 @@ function renderGroupDetailsRow(group, columnCount) {
       event.stopPropagation();
       state.trueBaselineOverrideRunId = run.run_id;
       persistTrueBaselineOverride();
+      actionMenu.open = false;
       renderAll();
     });
 
-    actionsCell.appendChild(openButton);
-    actionsCell.appendChild(baselineButton);
-    actionsCell.appendChild(trueBaselineButton);
+    actionList.appendChild(openButton);
+    actionList.appendChild(baselineButton);
+    actionList.appendChild(trueBaselineButton);
+    actionMenu.appendChild(actionList);
+    actionsCell.appendChild(actionMenu);
     tr.appendChild(actionsCell);
 
     tbody.appendChild(tr);
