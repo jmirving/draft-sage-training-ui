@@ -505,14 +505,14 @@ button {
 
 #comparison-table {
   width: 100%;
-  table-layout: fixed;
+  table-layout: auto;
 }
 
 #comparison-table th,
 #comparison-table td {
   white-space: normal;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 #comparison-table th:nth-child(1),
@@ -663,8 +663,16 @@ button {
   word-break: break-word;
 }
 
+#comparison-table td:nth-child(3) .table-primary,
+#comparison-table td:nth-child(3) .table-secondary {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 .group-cell-name {
   font-weight: 600;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .group-cell-meta {
@@ -672,6 +680,8 @@ button {
   color: var(--muted);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .group-details-row {
