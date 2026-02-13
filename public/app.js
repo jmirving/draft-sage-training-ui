@@ -15,9 +15,9 @@ const STATUS_LABELS = {
 };
 const GROUP_LABELS = {
   baseline: "Baseline",
-  "pb-role-weights-matrix": "Pick/Ban priors + role priors",
-  "role-priors": "Role priors",
-  "priors-role-priors": "Pick/Ban priors + role priors",
+  "pb-role-weights-matrix": "Pick/Ban priors + role distribution",
+  "role-priors": "Role distribution priors",
+  "priors-role-priors": "Pick/Ban priors + role distribution",
   "league-team-priors": "League/team priors",
   "timeaware-priors": "Time-aware priors"
 };
@@ -119,7 +119,7 @@ const CONFIG_DIFF_REGISTRY = [
   },
   {
     key: "role_priors_strength",
-    label: "Role priors weight",
+    label: "Champion Role Distribution weight",
     group: "Draft Priors",
     help: "Scalar weight applied to role distribution priors. Higher values increase pressure toward role-balanced drafts."
   },
@@ -172,9 +172,9 @@ const VARIANT_TOKEN_LABELS = {
   seed: "Seed",
   champion_eligibility_path: "Eligibility",
   champion_priors_dir: "PB priors src",
-  role_priors_dir: "Role priors src",
+  role_priors_dir: "Role dist src",
   champion_priors_strength: "PB priors wt",
-  role_priors_strength: "Role priors wt",
+  role_priors_strength: "Role dist wt",
   team_league_priors_strength: "Team/league wt",
   series_priors_strength: "Series priors wt",
   use_league_embeddings: "League emb",
