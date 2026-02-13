@@ -136,12 +136,6 @@ const CONFIG_DIFF_REGISTRY = [
     help: "Scalar weight for series-level priors."
   },
   {
-    key: "champion_priors_time_buckets",
-    label: "Champion priors time buckets",
-    group: "Draft Priors",
-    help: "Number of time buckets used for champion prior segmentation."
-  },
-  {
     key: "use_league_embeddings",
     inverseKey: "no_league_embeddings",
     label: "League embeddings",
@@ -183,7 +177,6 @@ const VARIANT_TOKEN_LABELS = {
   role_priors_strength: "Role priors wt",
   team_league_priors_strength: "Team/league wt",
   series_priors_strength: "Series priors wt",
-  champion_priors_time_buckets: "PB buckets",
   use_league_embeddings: "League emb",
   use_team_embeddings: "Team emb",
   inspection_keep: "Inspection keep"
