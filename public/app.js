@@ -287,6 +287,13 @@ function formatPercent(value, digits = 1) {
   return `${(value * 100).toFixed(digits)}%`;
 }
 
+function formatInteger(value) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "0";
+  }
+  return Math.floor(value).toLocaleString();
+}
+
 function formatDelta(value, digits = 4) {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return "—";
@@ -2419,6 +2426,11 @@ function renderPerSlotSection(summary, runId) {
   extremes.appendChild(createPerSlotExtreme("Worst", worstSlot));
   body.appendChild(extremes);
 
+  const breakdownGroups = buildPerSlotBreakdownGroups(rows);
+  if (breakdownGroups.length > 0) {
+    body.appendChild(createPerSlotBreakdownSection(breakdownGroups));
+  }
+
   const collapsedCount = 6;
   const expanded = state.perSlotExpandedRunIds.has(runId);
   const visibleRows = expanded ? rows : rows.slice(0, collapsedCount);
@@ -2482,6 +2494,236 @@ function createPerSlotExtreme(label, row) {
   card.appendChild(heading);
   card.appendChild(value);
   return card;
+}
+
+function isSampledPerSlotRow(row) {
+  return (
+    row &&
+    row.total > 0 &&
+    typeof row.accuracy === "number" &&
+    !Number.isNaN(row.accuracy)
+  );
+}
+
+function summarizePerSlotSlice(rows, predicate) {
+  const matched = rows.filter((row) => isSampledPerSlotRow(row) && predicate(row));
+  if (matched.length === 0) {
+    return null;
+  }
+  const correct = matched.reduce((sum, row) => sum + row.correct, 0);
+  const total = matched.reduce((sum, row) => sum + row.total, 0);
+  if (total <= 0) {
+    return null;
+  }
+  return {
+    slotCount: matched.length,
+    correct,
+    total,
+    accuracy: correct / total
+  };
+}
+
+function buildPerSlotBreakdownGroups(rows) {
+  const groups = [
+    {
+      title: "Action Type",
+      definitions: [
+        { label: "All picks", predicate: (row) => row.canonicalType === "pick" },
+        { label: "All bans", predicate: (row) => row.canonicalType === "ban" }
+      ]
+    },
+    {
+      title: "By Team",
+      definitions: [
+        { label: "Team 1 (all)", predicate: (row) => row.canonicalTeam === "team_1" },
+        { label: "Team 2 (all)", predicate: (row) => row.canonicalTeam === "team_2" },
+        {
+          label: "Team 1 picks",
+          predicate: (row) => row.canonicalTeam === "team_1" && row.canonicalType === "pick"
+        },
+        {
+          label: "Team 2 picks",
+          predicate: (row) => row.canonicalTeam === "team_2" && row.canonicalType === "pick"
+        },
+        {
+          label: "Team 1 bans",
+          predicate: (row) => row.canonicalTeam === "team_1" && row.canonicalType === "ban"
+        },
+        {
+          label: "Team 2 bans",
+          predicate: (row) => row.canonicalTeam === "team_2" && row.canonicalType === "ban"
+        }
+      ]
+    },
+    {
+      title: "Draft Phases",
+      definitions: [
+        {
+          label: "Ban phase 1 (1-3)",
+          predicate: (row) =>
+            row.canonicalType === "ban" &&
+            typeof row.canonicalNum === "number" &&
+            row.canonicalNum >= 1 &&
+            row.canonicalNum <= 3
+        },
+        {
+          label: "Ban phase 2 (4-5)",
+          predicate: (row) =>
+            row.canonicalType === "ban" &&
+            typeof row.canonicalNum === "number" &&
+            row.canonicalNum >= 4 &&
+            row.canonicalNum <= 5
+        },
+        {
+          label: "Pick opener (1)",
+          predicate: (row) =>
+            row.canonicalType === "pick" && typeof row.canonicalNum === "number" && row.canonicalNum === 1
+        },
+        {
+          label: "Pick mid phase (2-3)",
+          predicate: (row) =>
+            row.canonicalType === "pick" &&
+            typeof row.canonicalNum === "number" &&
+            row.canonicalNum >= 2 &&
+            row.canonicalNum <= 3
+        },
+        {
+          label: "Pick late phase (4-5)",
+          predicate: (row) =>
+            row.canonicalType === "pick" &&
+            typeof row.canonicalNum === "number" &&
+            row.canonicalNum >= 4 &&
+            row.canonicalNum <= 5
+        }
+      ]
+    },
+    {
+      title: "Team + Pick Phase",
+      definitions: [
+        {
+          label: "Team 1 pick 1",
+          predicate: (row) =>
+            row.canonicalTeam === "team_1" &&
+            row.canonicalType === "pick" &&
+            row.canonicalNum === 1
+        },
+        {
+          label: "Team 2 pick 1",
+          predicate: (row) =>
+            row.canonicalTeam === "team_2" &&
+            row.canonicalType === "pick" &&
+            row.canonicalNum === 1
+        },
+        {
+          label: "Team 2 picks 2-3",
+          predicate: (row) =>
+            row.canonicalTeam === "team_2" &&
+            row.canonicalType === "pick" &&
+            typeof row.canonicalNum === "number" &&
+            row.canonicalNum >= 2 &&
+            row.canonicalNum <= 3
+        },
+        {
+          label: "Team 1 picks 2-3",
+          predicate: (row) =>
+            row.canonicalTeam === "team_1" &&
+            row.canonicalType === "pick" &&
+            typeof row.canonicalNum === "number" &&
+            row.canonicalNum >= 2 &&
+            row.canonicalNum <= 3
+        },
+        {
+          label: "Team 2 picks 4-5",
+          predicate: (row) =>
+            row.canonicalTeam === "team_2" &&
+            row.canonicalType === "pick" &&
+            typeof row.canonicalNum === "number" &&
+            row.canonicalNum >= 4 &&
+            row.canonicalNum <= 5
+        },
+        {
+          label: "Team 1 picks 4-5",
+          predicate: (row) =>
+            row.canonicalTeam === "team_1" &&
+            row.canonicalType === "pick" &&
+            typeof row.canonicalNum === "number" &&
+            row.canonicalNum >= 4 &&
+            row.canonicalNum <= 5
+        }
+      ]
+    }
+  ];
+
+  return groups
+    .map((group) => {
+      const entries = group.definitions
+        .map((definition) => {
+          const summary = summarizePerSlotSlice(rows, definition.predicate);
+          if (!summary) {
+            return null;
+          }
+          return {
+            label: definition.label,
+            ...summary
+          };
+        })
+        .filter(Boolean);
+      return {
+        title: group.title,
+        entries
+      };
+    })
+    .filter((group) => group.entries.length > 0);
+}
+
+function createPerSlotBreakdownSection(groups) {
+  const section = document.createElement("div");
+  section.className = "per-slot-breakdown";
+
+  const heading = document.createElement("p");
+  heading.className = "per-slot-breakdown-title";
+  heading.textContent = "Breakdown";
+  section.appendChild(heading);
+
+  groups.forEach((group) => {
+    const block = document.createElement("div");
+    block.className = "per-slot-breakdown-group";
+
+    const title = document.createElement("p");
+    title.className = "per-slot-breakdown-group-title";
+    title.textContent = group.title;
+    block.appendChild(title);
+
+    const grid = document.createElement("div");
+    grid.className = "per-slot-breakdown-grid";
+
+    group.entries.forEach((entry) => {
+      const card = document.createElement("div");
+      card.className = "per-slot-breakdown-card";
+
+      const label = document.createElement("span");
+      label.className = "per-slot-breakdown-label";
+      label.textContent = entry.label;
+
+      const value = document.createElement("span");
+      value.className = "per-slot-breakdown-value";
+      value.textContent = formatPercent(entry.accuracy);
+
+      const meta = document.createElement("span");
+      meta.className = "per-slot-breakdown-meta";
+      meta.textContent = `${formatInteger(entry.correct)}/${formatInteger(entry.total)} correct · ${entry.slotCount} slots`;
+
+      card.appendChild(label);
+      card.appendChild(value);
+      card.appendChild(meta);
+      grid.appendChild(card);
+    });
+
+    block.appendChild(grid);
+    section.appendChild(block);
+  });
+
+  return section;
 }
 
 function createMetaField(label, value) {

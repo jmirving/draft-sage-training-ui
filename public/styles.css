@@ -933,6 +933,62 @@ button {
   line-height: 1.35;
 }
 
+.per-slot-breakdown {
+  display: grid;
+  gap: 10px;
+}
+
+.per-slot-breakdown-title {
+  margin: 0;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.per-slot-breakdown-group {
+  display: grid;
+  gap: 6px;
+}
+
+.per-slot-breakdown-group-title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.per-slot-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.per-slot-breakdown-card {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(25, 24, 23, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.per-slot-breakdown-label {
+  font-size: 0.76rem;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.per-slot-breakdown-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.per-slot-breakdown-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
 .per-slot-list {
   display: grid;
   gap: 8px;
