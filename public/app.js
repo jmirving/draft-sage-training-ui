@@ -25,122 +25,143 @@ const GROUP_LABELS = {
 const CONFIG_DIFF_REGISTRY = [
   {
     key: "dataset_label",
-    label: "Dataset label",
-    group: "Data"
+    label: "Dataset",
+    group: "Data + Training",
+    help: "Human-readable dataset name attached to the run."
   },
   {
     key: "split_strategy",
     label: "Split strategy",
-    group: "Data"
+    group: "Data + Training",
+    help: "How matches are split across train/val/test (for example, seriesid)."
   },
   {
     key: "patch_window",
     label: "Patch window",
-    group: "Data"
+    group: "Data + Training",
+    help: "Optional patch recency window applied before training."
   },
   {
     key: "patches",
     label: "Patch filter",
-    group: "Data",
-    format: "list"
+    group: "Data + Training",
+    format: "list",
+    help: "Explicit patch versions included in this run."
   },
   {
     key: "train_split",
-    label: "Train split",
-    group: "Data"
+    label: "Train split ratio",
+    group: "Data + Training",
+    help: "Fraction of examples allocated to training."
   },
   {
     key: "val_split",
-    label: "Validation split",
-    group: "Data"
+    label: "Validation split ratio",
+    group: "Data + Training",
+    help: "Fraction of examples allocated to validation."
   },
   {
     key: "test_split",
-    label: "Test split",
-    group: "Data"
+    label: "Test split ratio",
+    group: "Data + Training",
+    help: "Fraction of examples allocated to holdout testing."
   },
   {
     key: "batch_size",
     label: "Batch size",
-    group: "Optimization"
+    group: "Data + Training",
+    help: "Training batch size."
   },
   {
     key: "epochs",
-    label: "Epochs",
-    group: "Optimization"
+    label: "Epoch count",
+    group: "Data + Training",
+    help: "Maximum full passes over the training set."
   },
   {
     key: "learning_rate",
     label: "Learning rate",
-    group: "Optimization"
+    group: "Data + Training",
+    help: "Optimizer learning rate."
   },
   {
     key: "seed",
-    label: "Seed",
-    group: "Optimization"
+    label: "Random seed",
+    group: "Data + Training",
+    help: "Random seed used for reproducibility."
   },
   {
     key: "champion_eligibility_path",
     label: "Champion eligibility mask",
-    group: "Priors",
-    format: "presence_bool"
+    group: "Draft Priors",
+    format: "presence_bool",
+    help: "Whether an eligibility artifact is applied to mask unavailable champions."
   },
   {
     key: "champion_priors_dir",
-    label: "Champion PB priors artifact",
-    group: "Priors",
-    format: "presence_bool"
+    label: "Champion P/B priors source",
+    group: "Draft Priors",
+    format: "presence_bool",
+    help: "Whether champion pick/ban prior artifacts are loaded."
   },
   {
     key: "role_priors_dir",
-    label: "Role priors artifact",
-    group: "Priors",
-    format: "presence_bool"
+    label: "Role priors source",
+    group: "Draft Priors",
+    format: "presence_bool",
+    help: "Whether role prior artifacts are loaded."
   },
   {
     key: "champion_priors_strength",
-    label: "Champion PB priors strength",
-    group: "Priors"
+    label: "Champion P/B priors weight",
+    group: "Draft Priors",
+    help: "Scalar weight applied to champion pick/ban priors."
   },
   {
     key: "role_priors_strength",
-    label: "Role priors strength",
-    group: "Priors"
+    label: "Role priors weight",
+    group: "Draft Priors",
+    help: "Scalar weight applied to role priors."
   },
   {
     key: "team_league_priors_strength",
-    label: "Team/league priors strength",
-    group: "Priors"
+    label: "Team/league priors weight",
+    group: "Draft Priors",
+    help: "Scalar weight for team and league priors."
   },
   {
     key: "series_priors_strength",
-    label: "Series priors strength",
-    group: "Priors"
+    label: "Series priors weight",
+    group: "Draft Priors",
+    help: "Scalar weight for series-level priors."
   },
   {
     key: "champion_priors_time_buckets",
     label: "Champion priors time buckets",
-    group: "Priors",
-    format: "list"
+    group: "Draft Priors",
+    help: "Number of time buckets used for champion prior segmentation."
   },
   {
     key: "use_league_embeddings",
     inverseKey: "no_league_embeddings",
     label: "League embeddings",
     group: "Embeddings",
-    format: "bool"
+    format: "bool",
+    help: "Whether learned league embeddings are enabled."
   },
   {
     key: "use_team_embeddings",
     inverseKey: "no_team_embeddings",
     label: "Team embeddings",
     group: "Embeddings",
-    format: "bool"
+    format: "bool",
+    help: "Whether learned team embeddings are enabled."
   },
   {
     key: "inspection_keep",
     label: "Inspection sample size",
-    group: "Reporting"
+    group: "Reporting",
+    help: "Number of inspection samples retained for artifact review."
   }
 ];
 const VARIANT_TOKEN_LABELS = {
@@ -155,10 +176,13 @@ const VARIANT_TOKEN_LABELS = {
   epochs: "Epochs",
   learning_rate: "LR",
   seed: "Seed",
-  champion_priors_strength: "PB priors",
-  role_priors_strength: "Role priors",
-  team_league_priors_strength: "Team/league priors",
-  series_priors_strength: "Series priors",
+  champion_eligibility_path: "Eligibility",
+  champion_priors_dir: "PB priors src",
+  role_priors_dir: "Role priors src",
+  champion_priors_strength: "PB priors wt",
+  role_priors_strength: "Role priors wt",
+  team_league_priors_strength: "Team/league wt",
+  series_priors_strength: "Series priors wt",
   champion_priors_time_buckets: "PB buckets",
   use_league_embeddings: "League emb",
   use_team_embeddings: "Team emb",
@@ -420,6 +444,17 @@ function readConfigKey(config, spec) {
   return undefined;
 }
 
+function buildConfigHelpText(spec) {
+  if (!spec?.key) {
+    return "";
+  }
+  const keyInfo = spec.inverseKey
+    ? `Config keys: ${spec.key} (inverse: ${spec.inverseKey}).`
+    : `Config key: ${spec.key}.`;
+  const description = spec.help || "Tracked configuration knob used in comparisons.";
+  return `${keyInfo} ${description}`;
+}
+
 function serializeConfigValue(value) {
   if (value === undefined) {
     return "__undefined__";
@@ -506,6 +541,7 @@ function buildConfigDiffRows(selectedConfig, baselineConfig) {
       key: spec.key,
       label: spec.label,
       group: spec.group || "Other",
+      helpText: buildConfigHelpText(spec),
       selectedValue,
       baselineValue,
       changed: !configValuesEqual(selectedValue, baselineValue),
@@ -539,6 +575,9 @@ function createConfigDiffRow(row, options = {}) {
   const label = document.createElement("span");
   label.className = "config-diff-label";
   label.textContent = row.label;
+  if (row.helpText) {
+    label.title = row.helpText;
+  }
 
   const selected = document.createElement("span");
   selected.className = "config-diff-value selected";
@@ -1683,6 +1722,7 @@ function buildWorkspaceKnobRows(compareRuns, configByRunId) {
       key: spec.key,
       label: spec.label,
       group: spec.group || "Other",
+      helpText: buildConfigHelpText(spec),
       values,
       format: spec.format || null,
       isUnknown: false
@@ -1737,6 +1777,9 @@ function renderWorkspaceKnobTable(compareRuns, configByRunId) {
     const labelCell = document.createElement("td");
     labelCell.className = "knob-label";
     labelCell.textContent = `${row.group} · ${row.label}`;
+    if (row.helpText) {
+      labelCell.title = row.helpText;
+    }
     tr.appendChild(labelCell);
 
     row.values.forEach((value) => {
