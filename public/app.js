@@ -221,6 +221,7 @@ const state = {
   compareWorkspaceVisible: false,
   groupBaselineRunIds: new Map(),
   trueBaselineOverrideRunId: null,
+  activeRunActionMenuRunId: null,
   expandedGroupKeys: new Set(),
   perSlotExpandedRunIds: new Set(),
   tableSort: {
@@ -1110,7 +1111,8 @@ function getRunUpdatedAt(run) {
   return parseRunIdTimestamp(run?.run_id);
 }
 
-function closeRunActionMenus(exceptMenu = null) {
+function closeRunActionMenus(exceptMenu = null, exceptRunId = null) {
+  state.activeRunActionMenuRunId = exceptRunId;
   document.querySelectorAll(".run-action-menu[open]").forEach((menu) => {
     if (menu !== exceptMenu) {
       menu.open = false;
@@ -1795,12 +1797,20 @@ function renderGroupDetailsRow(group, columnCount) {
 
     const actionMenu = document.createElement("details");
     actionMenu.className = "run-action-menu";
+    if (state.activeRunActionMenuRunId === run.run_id) {
+      actionMenu.open = true;
+    }
     actionMenu.addEventListener("click", (event) => {
       event.stopPropagation();
     });
     actionMenu.addEventListener("toggle", () => {
       if (actionMenu.open) {
-        closeRunActionMenus(actionMenu);
+        closeRunActionMenus(actionMenu, run.run_id);
+        if (state.selectedRunId !== run.run_id) {
+          selectRun(run.run_id);
+        }
+      } else if (state.activeRunActionMenuRunId === run.run_id) {
+        state.activeRunActionMenuRunId = null;
       }
     });
 
@@ -1808,11 +1818,6 @@ function renderGroupDetailsRow(group, columnCount) {
     actionSummary.className = "run-action-trigger";
     actionSummary.textContent = "⋮";
     actionSummary.setAttribute("aria-label", "Run actions");
-    actionSummary.addEventListener("click", (event) => {
-      event.stopPropagation();
-      closeRunActionMenus(actionMenu);
-      selectRun(run.run_id);
-    });
     actionMenu.appendChild(actionSummary);
 
     const actionList = document.createElement("div");
@@ -1825,6 +1830,7 @@ function renderGroupDetailsRow(group, columnCount) {
     openButton.addEventListener("click", (event) => {
       event.stopPropagation();
       selectRun(run.run_id);
+      state.activeRunActionMenuRunId = null;
       actionMenu.open = false;
     });
 
@@ -1837,6 +1843,7 @@ function renderGroupDetailsRow(group, columnCount) {
       event.stopPropagation();
       state.groupBaselineRunIds.set(group.key, run.run_id);
       persistGroupBaselineOverrides();
+      state.activeRunActionMenuRunId = null;
       actionMenu.open = false;
       renderAll();
     });
@@ -1852,6 +1859,7 @@ function renderGroupDetailsRow(group, columnCount) {
       event.stopPropagation();
       state.trueBaselineOverrideRunId = run.run_id;
       persistTrueBaselineOverride();
+      state.activeRunActionMenuRunId = null;
       actionMenu.open = false;
       renderAll();
     });
