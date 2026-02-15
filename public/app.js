@@ -15,9 +15,9 @@ const STATUS_LABELS = {
 };
 const GROUP_LABELS = {
   baseline: "Baseline",
-  "pb-role-weights-matrix": "Pick/Ban priors + role distribution",
+  "pb-role-weights-matrix": "Draft frequency + role distribution",
   "role-priors": "Role distribution priors",
-  "priors-role-priors": "Pick/Ban priors + role distribution",
+  "priors-role-priors": "Draft frequency + role distribution",
   "league-team-priors": "League/team priors",
   "timeaware-priors": "Time-aware priors"
 };
@@ -99,10 +99,10 @@ const CONFIG_DIFF_REGISTRY = [
   },
   {
     key: "champion_priors_dir",
-    label: "Champion P/B priors source",
+    label: "Draft frequency priors source",
     group: "Draft Priors",
     format: "presence_bool",
-    help: "Whether champion pick/ban priors are loaded. P/B priors bias predictions toward champions historically picked or banned in similar contexts."
+    help: "Whether draft frequency priors are loaded. Frequency priors bias predictions toward champions historically picked or banned in similar contexts."
   },
   {
     key: "role_priors_dir",
@@ -113,9 +113,9 @@ const CONFIG_DIFF_REGISTRY = [
   },
   {
     key: "champion_priors_strength",
-    label: "Champion P/B priors weight",
+    label: "Draft frequency bias weight",
     group: "Draft Priors",
-    help: "Scalar weight applied to champion pick/ban priors. Higher values increase the influence of historical pick/ban tendencies."
+    help: "Scalar weight applied to draft frequency priors. Higher values increase the influence of historical pick/ban tendencies."
   },
   {
     key: "role_priors_strength",
@@ -171,9 +171,9 @@ const VARIANT_TOKEN_LABELS = {
   learning_rate: "LR",
   seed: "Seed",
   champion_eligibility_path: "Eligibility",
-  champion_priors_dir: "PB priors src",
+  champion_priors_dir: "Draft freq src",
   role_priors_dir: "Role dist src",
-  champion_priors_strength: "PB priors wt",
+  champion_priors_strength: "Draft freq wt",
   role_priors_strength: "Role dist wt",
   team_league_priors_strength: "Team/league wt",
   series_priors_strength: "Series priors wt",
