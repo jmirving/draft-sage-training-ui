@@ -766,7 +766,7 @@ function parseRunIdTimestamp(runId) {
     return null;
   }
 
-  const compact = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/.exec(runId);
+  const compact = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})(?:[_-].*)?$/.exec(runId);
   if (compact) {
     const [, year, month, day, hour, minute, second] = compact;
     return `${year}-${month}-${day}T${hour}:${minute}:${second}Z`;
@@ -1241,6 +1241,19 @@ function getBestRunByMetric(runs) {
   }, null);
 }
 
+function getLatestRunByTimestamp(runs) {
+  let latestRun = null;
+  let latestTimestamp = Number.NEGATIVE_INFINITY;
+  runs.forEach((run, index) => {
+    const timestamp = getRunSortTimestamp(run, index);
+    if (timestamp >= latestTimestamp) {
+      latestTimestamp = timestamp;
+      latestRun = run;
+    }
+  });
+  return latestRun;
+}
+
 function buildGroupStats(runs) {
   const groups = new Map();
   runs.forEach((run) => {
@@ -1265,6 +1278,7 @@ function buildComparisonRows(runs) {
     const referenceRun = getGroupReferenceRun(group.key, group.runs);
     const referenceConfig = getRunConfig(referenceRun, true);
     const bestConfig = getRunConfig(group.best, true);
+    const latestRun = getLatestRunByTimestamp(group.runs);
     const metricSamples = group.runs
       .map((run) => getMetricValue(run))
       .filter((value) => typeof value === "number" && !Number.isNaN(value));
@@ -1274,7 +1288,7 @@ function buildComparisonRows(runs) {
       metricMin !== null && metricMax !== null ? metricMax - metricMin : null;
     const metricValue = group.best ? getMetricValue(group.best) : null;
     const delta = computeDelta(metricValue, baselineMetric);
-    const updatedRaw = getRunUpdatedAt(group.best);
+    const updatedRaw = getRunUpdatedAt(latestRun || group.best);
     const updatedTs = updatedRaw ? new Date(updatedRaw).getTime() : Number.NEGATIVE_INFINITY;
 
     return {
@@ -1282,6 +1296,7 @@ function buildComparisonRows(runs) {
       runCount: group.runs.length,
       metricValue,
       delta,
+      latestRun,
       updatedRaw,
       updatedTs: Number.isNaN(updatedTs) ? Number.NEGATIVE_INFINITY : updatedTs,
       statusLabel: STATUS_LABELS[group.best?.status] || group.best?.status || "—",
@@ -1447,7 +1462,7 @@ function renderComparisonTable() {
 
   clearTableState();
 
-  const columnCount = 3;
+  const columnCount = 4;
   const groups = buildComparisonRows(runs);
   if (state.groupFilter !== "all" && groups.length === 1) {
     state.expandedGroupKeys.add(groups[0].key);
@@ -1511,6 +1526,12 @@ function renderComparisonTable() {
       createPrimarySecondaryCell(
         group.metricValue !== null ? formatNumber(group.metricValue) : "—",
         group.delta !== null ? `Δ ${formatDelta(group.delta)}` : ""
+      )
+    );
+    row.appendChild(
+      createPrimarySecondaryCell(
+        group.updatedRaw ? formatDate(group.updatedRaw) : "—",
+        group.latestRun?.run_id ? `run ${group.latestRun.run_id}` : ""
       )
     );
 
